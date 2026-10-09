@@ -84,6 +84,16 @@
     .track i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, #3f6f2a, #86e05a); transition: width .12s linear; }
     #btnSell { margin-top: 8px; width: 100%; }
 
+    /* Панель амбара: уровень, вместимость, цена и окупаемость следующего уровня */
+    #barnInfo {
+      margin-top: 10px; background: #0d1209; border: 1px solid var(--line);
+      border-radius: 8px; padding: 8px 10px;
+    }
+    #barnInfo .brow { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 2px 0; color: var(--dim); }
+    #barnInfo .brow b { color: var(--txt); font-weight: 700; text-align: right; }
+    #barnInfo .brow.ok b { color: var(--green); }
+    #barnInfo .bnote { margin-top: 6px; font-size: 11.5px; line-height: 1.35; color: var(--gold); }
+
     /* ---- ПРАВАЯ ЧАСТЬ: магазин ---- */
     #shop {
       flex: 0 0 auto; width: 380px; min-height: 0; background: var(--bg2);
@@ -214,9 +224,18 @@
       <div id="eventBar" hidden></div>
 
       <div id="harvestWrap">
-        <div class="hbar"><span>🧺 Урожай в амбаре</span><span><b id="hvNow">0</b> / <b id="hvCap">200</b></span></div>
+        <div class="hbar"><span>🧺 Урожай в амбаре</span><span><b id="hvNow">0</b> / <b id="hvCap">150</b></span></div>
         <div class="track"><i id="hvFill"></i></div>
         <button id="btnSell" class="btn gold">🏪 Продать урожай — ▦ 0</button>
+        <div id="barnInfo">
+          <div class="brow"><span>📦 Уровень амбара</span><b id="biLv">0</b></div>
+          <div class="brow"><span>🧺 Вместимость</span><b id="biCap">150</b></div>
+          <div class="brow"><span>➡️ Следующий уровень</span><b id="biCap2">300 (×2)</b></div>
+          <div class="brow"><span>💰 Цена следующего уровня</span><b id="biPrice">▦ 150</b></div>
+          <div class="brow"><span>📌 До покупки</span><b id="biNeed">▦ 0</b></div>
+          <div class="brow ok"><span>⏱ Окупится</span><b id="biPay">≈ 1 мин</b></div>
+          <div class="bnote" id="biNote" hidden></div>
+        </div>
       </div>
 
       <button id="btnInstall" class="btn ghost" hidden>⬇ Установить приложение</button>
@@ -425,7 +444,8 @@ const BEDS = [
 /* ===== АПГРЕЙДЫ (многоразовые, показывают уровень) =====
    Сложный баланс: цены растут ×2–×3 за уровень (g), а прибавка к доходу — небольшая.
    Поэтому прокачать всё сразу нельзя — приходится выбирать, что важнее.
-   Исключение — Амбар: дешёвый (цена ×1.15 за уровень) и даёт ×2.2 лимита, чтобы окупался.
+   Исключение — Амбар: цена растёт плавно ×1.45 за уровень и даёт ×2 лимита, к тому же
+   его цена ограничена сверху доходом за 10 минут — поэтому амбар всегда окупается.
    kind: clickFlat/clickMul — клик, autoFlat/autoMul — PPS,
          growMul — скорость роста, yieldMul — размер урожая,
          barnCap — лимит амбара, priceMul — цена, allMul — ко всему доходу. */
@@ -453,8 +473,8 @@ const UPG = [
   // ---- УРОЖАЙ ----
   { id: 'collector',n: 'Сборщики',          ic: '🧺', sec: 'УРОЖАЙ',   desc: '+12% к размеру урожая',    base: 500,    g: 2.10, kind: 'yieldMul',  val: 0.12 },
   { id: 'orangery', n: 'Оранжерея',         ic: '🏡', sec: 'УРОЖАЙ',   desc: '+22% к размеру урожая',    base: 1e5,    g: 2.30, kind: 'yieldMul',  val: 0.22 },
-  { id: 'barn',     n: 'Амбар',             ic: '📦', sec: 'УРОЖАЙ',   desc: '×2.2 к лимиту хранения',   base: 150,    g: 1.15, kind: 'barnCap',   val: 2.2 },
-  { id: 'market',   n: 'Рынок',             ic: '🏪', sec: 'УРОЖАЙ',   desc: '+12% к цене и авто-продажа',base: 1200,  g: 2.15, kind: 'priceMul',  val: 0.12 },
+  { id: 'barn',     n: 'Амбар',             ic: '📦', sec: 'УРОЖАЙ',   desc: '×2 к лимиту хранения',   base: 150,    g: 1.45, kind: 'barnCap',   val: 2 },
+  { id: 'market',   n: 'Рынок',             ic: '🏪', sec: 'УРОЖАЙ',   desc: '+12% к цене',              base: 1200,  g: 2.15, kind: 'priceMul',  val: 0.12 },
   { id: 'logistics',n: 'Логистика',         ic: '🚚', sec: 'УРОЖАЙ',   desc: '+30% к размеру урожая',    base: 4e6,    g: 2.40, kind: 'yieldMul',  val: 0.3 },
   { id: 'export',   n: 'Экспорт',           ic: '🚢', sec: 'УРОЖАЙ',   desc: '+25% к цене продажи',      base: 3e8,    g: 2.50, kind: 'priceMul',  val: 0.25 },
   // ---- ОСОБЫЕ (самые дорогие, ×3 за уровень) ----
@@ -587,7 +607,8 @@ function autoMul() { return (1 + lvl('tractor') * 0.10 + lvl('solar') * 0.15 + l
 function growMul() { return (1 + lvl('fertilizer') * 0.15 + lvl('bees') * 0.18 + lvl('greenhouse') * 0.22 + lvl('hydro') * 0.3 + lvl('genetics') * 0.45 + lvl('magic') * 0.7); }
 function yieldMul() { return (1 + lvl('collector') * 0.12 + lvl('orangery') * 0.22 + lvl('logistics') * 0.3); }
 function allMul() { return (1 + lvl('portal') * 0.25 + lvl('timemachine') * 0.35 + lvl('blackhole') * 0.5 + lvl('mars') * 0.8); }
-function barnCap() { return sciMulS(sciFrom(150), Math.pow(2.2, lvl('barn'))); }   // амбар: ×2.2 к лимиту за уровень (big)
+function barnCap() { return sciMulS(sciFrom(150), Math.pow(2, lvl('barn'))); }   // амбар: ×2 к лимиту за уровень (big)
+function barnDef() { return UPG.find(x => x.id === 'barn'); }                     // апгрейд «Амбар»
 function price() { return 1 + lvl('market') * 0.12 + lvl('export') * 0.25; }
 /* Престиж: каждая ⭐ даёт +5% ко всему доходу (складывается с прочими множителями).
    Звёзды храним как BigInt — они не ограничены 2^53, не переполняются и не могут уйти в минус.
@@ -648,7 +669,24 @@ function prestigeMul() { return 1 + starsNum() * 0.05; }    // бонус не �
 function eventMul() { return ev ? ev.mul : 1; }
 function perClick() { return clickFlat() * clickMul() * allMul() * prestigeMul() * eventMul(); }
 function perSec() { return autoFlat() * autoMul() * allMul() * prestigeMul() * eventMul(); }
-function upCost(u) { return sciMulS(sciFrom(u.base), Math.pow(u.g, lvl(u.id))); }
+function upCost(u) {
+  /* Обычная цена: базовая × рост(g) в степени уровня (для амбара g = 1.45 — рост мягкий) */
+  const honest = sciMulS(sciFrom(u.base), Math.pow(u.g, lvl(u.id)));
+  /* Правило окупаемости амбара: если честная цена дороже дохода за 10 минут (600 с),
+     снижаем её до этого предела. Значит амбар всегда окупится максимум за 10 минут. */
+  if (u.kind === 'barnCap' && perSec() > 0) {
+    const budget = sciMulS(sciFrom(perSec()), 600);
+    if (sciLt(budget, honest)) return budget;
+  }
+  return honest;
+}
+/* Окупаемость амбара: цена следующего уровня / доход за секунду → минут.
+   0..10 мин — всегда, т.к. цена амбара не превышает доход за 600 с. */
+function barnPaybackMin() {
+  const p = perSec();
+  if (p <= 0) return -1;                       // дохода нет — окупаемость пока неизвестна
+  return sciToNum(sciDiv(upCost(barnDef()), sciFrom(p))) / 60;
+}
 /* Цена «бесконечной» грядки растёт по числу грядок сверх пятой */
 function infBedCost() { return sciMulS(sciFrom(360000), Math.pow(3.2, S.beds - 5)); }
 
@@ -745,11 +783,11 @@ function buyBedInf() {
 }
 
 /* Продажа урожая */
-function sellHarvest(auto) {
-  if (S.harvest <= 0) { if (!auto) toast('Амбар пуст'); return; }
+function sellHarvest() {
+  if (S.harvest <= 0) { toast('Амбар пуст'); return; }
   const gain = sciMulS(sciFrom(S.harvest), price());   // выручка как big-число
   S.px = sciAdd(S.px, gain); S.total = sciAdd(S.total, gain); S.harvest = 0;
-  toast((auto ? '🏪 Авто-продажа: ▦ ' : '🏪 Продано на ▦ ') + fmt(gain));
+  toast('🏪 Продано на ▦ ' + fmt(gain));
   renderHud(); updateAfford();
 }
 
@@ -1051,6 +1089,30 @@ function renderHud() {
   $('hvFill').style.width = pct + '%';
   $('btnSell').textContent = '🏪 Продать урожай — ▦ ' + fmt(sciMulS(sciFrom(S.harvest), price()));
   $('btnSell').disabled = S.harvest <= 0;
+  /* ===== Панель амбара: уровень, вместимость, цена, остаток и окупаемость ===== */
+  const bDef = barnDef();
+  const bLv = lvl('barn');
+  const bCap = barnCap();
+  const bCost = upCost(bDef);                          // цена (с правилом «не дороже 10 минут дохода»)
+  $('biLv').textContent = bLv;
+  $('biCap').textContent = fmt(bCap);
+  $('biCap2').textContent = fmt(sciMulS(bCap, 2)) + ' (×2)';
+  $('biPrice').textContent = '▦ ' + fmt(bCost);
+  /* Сколько осталось до следующего уровня амбара */
+  $('biNeed').textContent = sciGte(S.px, bCost) ? '✓ хватает' : '▦ ' + fmt(sciSub(bCost, S.px));
+  /* Окупаемость: показываем всегда, чтобы игрок видел, что амбар выгоден */
+  const bPay = barnPaybackMin();
+  $('biPay').textContent = bPay < 0 ? '— (нет дохода)' : (bPay < 1 ? '< 1 мин (доход ▦ ' + fmt(perSec()) + '/с)' : '≈ ' + Math.ceil(bPay) + ' мин (доход ▦ ' + fmt(perSec()) + '/с)');
+  /* Если цена была снижена по правилу окупаемости — честно показываем это игроку */
+  const honestBarn = sciMulS(sciFrom(bDef.base), Math.pow(bDef.g, bLv));
+  const bNote = $('biNote');
+  if (sciLt(bCost, honestBarn)) {
+    bNote.hidden = false;
+    bNote.textContent = '⚡ Цена снижена: амбар не дороже твоего дохода за 10 минут (было бы ▦ ' + fmt(honestBarn) + ').';
+  } else {
+    bNote.hidden = true;
+    bNote.textContent = '';
+  }
 }
 
 /* ======================================================================
@@ -1077,8 +1139,7 @@ function updateGarden(dt) {
     const now = performance.now();
     if (now - lastFullToast > 4000) { lastFullToast = now; toast('📦 Амбар полон — продай урожай или купи Амбар'); }
   }
-  if (lvl('market') > 0 && sciGte(sciFrom(S.harvest), sciMulS(cap, 0.85))) sellHarvest(true);   // авто-продажа с рынком
-}
+  }
 
 /* ======================================================================
    CANVAS: детализированная пиксельная сцена
@@ -1368,7 +1429,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
    ====================================================================== */
 $('floats').addEventListener('pointerdown', (e) => e.preventDefault());
 $('gardenBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); tap(e); });
-$('btnSell').onclick = () => sellHarvest(false);
+$('btnSell').onclick = () => sellHarvest();
 $('btnSettings').onclick = openSettings;
 document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 window.addEventListener('beforeunload', save);
