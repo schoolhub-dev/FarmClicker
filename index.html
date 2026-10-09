@@ -260,14 +260,98 @@ const $ = (id) => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const MAX_BEDS = 40;                           // предел для «бесконечной» грядки
 
-/* Короткий формат больших чисел: 1.2K, 3.4M, 5.6B ... */
-function fmt(n) {
-  n = Math.floor(n);
-  if (n < 1000) return '' + n;
-  const u = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc'];
-  let i = 0;
-  while (n >= 1000 && i < u.length - 1) { n /= 1000; i++; }
-  return n.toFixed(n < 10 ? 2 : n < 100 ? 1 : 0) + u[i];
+/* ======================================================================
+   BIG-ЧИСЛА (защита от переполнения)
+   ======================================================================
+   Обычные double переполняются: при очень больших суммах операции дают
+   Infinity/NaN, и доход «уходит в минус». Чтобы этого не было, деньги
+   (px и total) храним как { m, e } где значение = m·10^e, а мантисса m
+   лежит в [1, 10) — как в научной записи. Все операции — через функции
+   ниже, они не могут ни переполниться, ни дать отрицательный результат.
+   Группы суффиксов: K, M, B, T, Qa, Qi, Sx, Sp, Oc, No, Dc.
+   Всё, что больше таблицы суффиксов, показывается как «∞» (лимит). */
+const SUF = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc'];
+
+/* Создать big-число m·10^e. Нормализует мантиссу в [1,10).
+   Отрицательные/ноль → 0 (деньги никогда не уходят в минус),
+   не-числа (Infinity/NaN) → за-предельный «∞»-маркер. */
+function sci(m, e) {
+  m = Number(m); e = Number(e) || 0;
+  if (!isFinite(m)) return { m: 1, e: 200 };       // переполнение double → «бесконечный» лимит
+  if (!(m > 0)) return { m: 0, e: 0 };             // ноль или минус → 0
+  const pe = Math.floor(Math.log10(m)) + e;        // порядок значения
+  return { m: m / Math.pow(10, pe - e), e: pe };
+}
+function sciFrom(x) { return sci(x, 0); }          // обычное число → big
+
+/* Преобразовать в число (только для DOM-ширин/процентов — безопасно упирается в предел) */
+function sciToNum(a) {
+  if (a.m === 0) return 0;
+  if (a.e >= 130) return 1e130;                    // не даём DOM-математике уйти в Infinity
+  return a.m * Math.pow(10, a.e);
+}
+
+/* Сложение: приводим к общему порядку. Разница >12 порядков пренебрежима —
+   точности double (15 знаков) для неё не хватает, поэтому просто берём большее. */
+function sciAdd(a, b) {
+  if (a.m === 0) return b;
+  if (b.m === 0) return a;
+  if (a.e - b.e >= 12) return a;
+  if (b.e - a.e >= 12) return b;
+  const e = Math.min(a.e, b.e);
+  return sci(a.m * Math.pow(10, a.e - e) + b.m * Math.pow(10, b.e - e), e);
+}
+
+/* Вычитание (только для траты, a >= b): никогда не даёт отрицательный результат */
+function sciSub(a, b) {
+  if (b.m === 0) return a;
+  if (a.m === 0) return { m: 0, e: 0 };
+  if (a.e < b.e || (a.e === b.e && a.m < b.m)) return { m: 0, e: 0 };  // не хватает → 0, без минуса
+  if (a.e - b.e >= 12) return a;                   // цена пренебрежимо мала
+  const e = Math.min(a.e, b.e);
+  return sci(a.m * Math.pow(10, a.e - e) - b.m * Math.pow(10, b.e - e), e);
+}
+
+/* Умножение и деление */
+function sciMul(a, b) { return (a.m === 0 || b.m === 0) ? { m: 0, e: 0 } : sci(a.m * b.m, a.e + b.e); }
+function sciMulS(a, s) { return sciMul(a, sciFrom(s)); }
+function sciDiv(a, b)  { return b.m === 0 ? { m: 1, e: 200 } : sci(a.m / b.m, a.e - b.e); }
+function sciDivS(a, s) { return sciDiv(a, sciFrom(s)); }
+
+/* Сравнение: -1/0/1 */
+function sciCmp(a, b) {
+  if (a.m === 0) return b.m === 0 ? 0 : -1;
+  if (b.m === 0) return 1;
+  if (a.e !== b.e) return a.e > b.e ? 1 : -1;
+  return a.m > b.m ? 1 : a.m < b.m ? -1 : 0;
+}
+function sciGte(a, b) { return sciCmp(a, b) >= 0; }
+function sciLt(a, b)  { return sciCmp(a, b) < 0; }
+function sciEq(a, b)  { return sciCmp(a, b) === 0; }
+
+/* Квадратный корень (для престижа) */
+function sciSqrt(a) { return a.m === 0 ? { m: 0, e: 0 } : sci(Math.sqrt(a.m), a.e / 2); }
+/* Целая часть (вниз) */
+function sciFloor(a) { return a.e < 0 ? { m: 0, e: 0 } : sci(Math.floor(a.m), a.e); }
+
+/* Текст: от 0 до 999 показываем числом, дальше — суффикс, за таблицей — ∞ */
+function sciStr(a) {
+  if (a.e < 3) { const v = a.m * Math.pow(10, a.e); return '' + Math.max(0, Math.floor(v)); }
+  let g = Math.floor(a.e / 3);
+  if (g >= SUF.length) return '∞';                 // превышен лимит суффиксов
+  let mu = a.m * Math.pow(10, a.e - g * 3);        // мантисса в [1, 1000) для удобства чтения
+  if (mu >= 999.95) { mu /= 1000; g++; if (g >= SUF.length) return '∞'; }
+  const s = mu >= 100 ? mu.toFixed(0) : mu >= 10 ? mu.toFixed(1) : mu.toFixed(2);
+  return s + SUF[g];
+}
+
+/* Универсальный формат: принимает и обычное число, и big-число {m,e}.
+   Никогда не возвращает NaN/Infinity/минус. */
+function fmt(x) {
+  if (x && typeof x === 'object' && isFinite(x.m)) return sciStr(x);
+  const n = Number(x);
+  if (!isFinite(n)) return '∞';
+  return sciStr(sci(n < 0 ? 0 : n, 0));
 }
 
 /* ===== СЕМЕНА (одноразовые): 45 культур по возрастанию цены =====
@@ -387,7 +471,7 @@ function defState() {
   const up = {};
   UPG.forEach(u => up[u.id] = 0);
   return {
-    px: 0, total: 0, clicks: 0,
+    px: { m: 0, e: 0 }, total: { m: 0, e: 0 }, clicks: 0,   // px/total — big-числа {m,e}
     harvest: 0,          // урожай в амбаре (единицы)
     beds: 1,             // число грядок
     seed: 'wheat',       // активное (последнее купленное) семя
@@ -419,7 +503,7 @@ function updateEvents(dt) {
     if (ev.t <= 0) { toast('Событие «' + ev.n + '» закончилось'); ev = null; }
     return;
   }
-  if (S.total < 500) return;                      // в самом начале игрока не трогаем
+  if (sciLt(S.total, sciFrom(500))) return;          // в самом начале игрока не трогаем
   nextEventIn -= dt;
   if (nextEventIn > 0) return;
   const e = EVENTS[Math.floor(Math.random() * EVENTS.length)];
@@ -442,8 +526,14 @@ function sanitizeState(o) {
   const s = defState();
   // числа: при ошибке или бесконечности берём значение по умолчанию
   const num = (v, lo, hi, def) => { v = Number(v); return (isFinite(v)) ? clamp(v, lo, hi) : def; };
-  s.px      = num(o.px, 0, Infinity, 0);
-  s.total   = num(o.total, 0, Infinity, 0);
+  // big-числа {m,e}: принимаем и объект мантисса/порядок, и число (старые сохранения/коды)
+  const sciDef = (v) => {
+    if (v && typeof v === 'object' && isFinite(v.m)) return sci(v.m, v.e);
+    const n = Number(v);
+    return isFinite(n) ? sci(Math.max(n, 0), 0) : { m: 0, e: 0 };
+  };
+  s.px      = sciDef(o.px);
+  s.total   = sciDef(o.total);
   s.clicks  = num(o.clicks, 0, Infinity, 0) | 0;
   s.harvest = num(o.harvest, 0, Infinity, 0);
   s.beds    = Math.round(num(o.beds, 1, MAX_BEDS, 1));
@@ -490,18 +580,18 @@ function autoMul() { return (1 + lvl('tractor') * 0.10 + lvl('solar') * 0.15 + l
 function growMul() { return (1 + lvl('fertilizer') * 0.15 + lvl('bees') * 0.18 + lvl('greenhouse') * 0.22 + lvl('hydro') * 0.3 + lvl('genetics') * 0.45 + lvl('magic') * 0.7); }
 function yieldMul() { return (1 + lvl('collector') * 0.12 + lvl('orangery') * 0.22 + lvl('logistics') * 0.3); }
 function allMul() { return (1 + lvl('portal') * 0.25 + lvl('timemachine') * 0.35 + lvl('blackhole') * 0.5 + lvl('mars') * 0.8); }
-function barnCap() { return Math.floor(150 * Math.pow(2.2, lvl('barn'))); }   // амбар: ×2.2 к лимиту за уровень
+function barnCap() { return sciMulS(sciFrom(150), Math.pow(2.2, lvl('barn'))); }   // амбар: ×2.2 к лимиту за уровень (big)
 function price() { return 1 + lvl('market') * 0.12 + lvl('export') * 0.25; }
 /* Престиж: каждая ⭐ даёт +5% ко всему доходу (складывается с прочими множителями) */
-function prestigeGain() { return Math.floor(Math.sqrt(S.total / 1e4)); }      // сколько ⭐ дадут за текущий прогресс
+function prestigeGain() { return sciFloor(sciSqrt(sciDivS(S.total, 1e4))); }      // сколько ⭐ дадут за текущий прогресс (big)
 function prestigeMul() { return 1 + (S.stars || 0) * 0.05; }
 /* Редкие события: временно меняют доход (засуха, вредители — снижают, ярмарка — повышает) */
 function eventMul() { return ev ? ev.mul : 1; }
 function perClick() { return clickFlat() * clickMul() * allMul() * prestigeMul() * eventMul(); }
 function perSec() { return autoFlat() * autoMul() * allMul() * prestigeMul() * eventMul(); }
-function upCost(u) { return Math.floor(u.base * Math.pow(u.g, lvl(u.id))); }
+function upCost(u) { return sciMulS(sciFrom(u.base), Math.pow(u.g, lvl(u.id))); }
 /* Цена «бесконечной» грядки растёт по числу грядок сверх пятой */
-function infBedCost() { return Math.floor(360000 * Math.pow(3.2, S.beds - 5)); }
+function infBedCost() { return sciMulS(sciFrom(360000), Math.pow(3.2, S.beds - 5)); }
 
 /* ===== Тост ===== */
 let lastFullToast = 0;
@@ -535,7 +625,7 @@ function closeModal() { $('modalWrap').hidden = true; }
    ====================================================================== */
 function tap(e) {
   const gain = perClick();
-  S.px += gain; S.total += gain; S.clicks++;
+  S.px = sciAdd(S.px, sciFrom(gain)); S.total = sciAdd(S.total, sciFrom(gain)); S.clicks++;
   const r = cv.getBoundingClientRect();
   const sx = clamp(e.clientX - r.left, 2, r.width - 2);
   const sy = clamp(e.clientY - r.top, 2, r.height - 2);
@@ -548,8 +638,8 @@ function tap(e) {
 function buyUp(id) {
   const u = UPG.find(x => x.id === id);
   const cost = upCost(u);
-  if (S.px < cost) { toast('Нужно ▦ ' + fmt(cost)); return; }
-  S.px -= cost;
+  if (sciLt(S.px, cost)) { toast('Нужно ▦ ' + fmt(cost)); return; }
+  S.px = sciSub(S.px, cost);
   S.up[id]++;
   toast('🛠 ' + u.n + ' ур. ' + S.up[id]);
   renderShop(true); renderHud();
@@ -559,8 +649,8 @@ function buyUp(id) {
 function buySeed(id) {
   const s = SEEDS.find(x => x.id === id);
   if (S.seeds[id]) return;                       // уже куплено — не должно случаться
-  if (S.px < s.cost) { toast('Нужно ▦ ' + fmt(s.cost)); return; }
-  S.px -= s.cost;
+  if (sciLt(S.px, sciFrom(s.cost))) { toast('Нужно ▦ ' + fmt(s.cost)); return; }
+  S.px = sciSub(S.px, sciFrom(s.cost));
   S.seeds[id] = true;
   S.seed = id;                                    // засеваем новинку
   toast('🌱 Засеяно: ' + s.n + '!');
@@ -573,8 +663,8 @@ function buyBedTo(n) {
   const b = BEDS.find(x => x.beds === n);
   if (S.beds >= n) return;
   if (S.beds !== n - 1) { toast('Сначала купи предыдущую грядку'); return; }
-  if (S.px < b.cost) { toast('Нужно ▦ ' + fmt(b.cost)); return; }
-  S.px -= b.cost;
+  if (sciLt(S.px, sciFrom(b.cost))) { toast('Нужно ▦ ' + fmt(b.cost)); return; }
+  S.px = sciSub(S.px, sciFrom(b.cost));
   S.beds = n;
   S.prog.push(0);
   toast('🌱 Грядок стало: ' + n);
@@ -586,8 +676,8 @@ function buyBedTo(n) {
 function buyBedInf() {
   if (S.beds >= MAX_BEDS) { toast('Достигнут предел грядок (' + MAX_BEDS + ')'); return; }
   const cost = infBedCost();
-  if (S.px < cost) { toast('Нужно ▦ ' + fmt(cost)); return; }
-  S.px -= cost;
+  if (sciLt(S.px, cost)) { toast('Нужно ▦ ' + fmt(cost)); return; }
+  S.px = sciSub(S.px, cost);
   S.beds++;
   S.prog.push(0);
   toast('🌱 Бесконечная грядка: ' + S.beds + ' шт.');
@@ -598,8 +688,8 @@ function buyBedInf() {
 /* Продажа урожая */
 function sellHarvest(auto) {
   if (S.harvest <= 0) { if (!auto) toast('Амбар пуст'); return; }
-  const gain = Math.floor(S.harvest * price());
-  S.px += gain; S.total += gain; S.harvest = 0;
+  const gain = sciMulS(sciFrom(S.harvest), price());   // выручка как big-число
+  S.px = sciAdd(S.px, gain); S.total = sciAdd(S.total, gain); S.harvest = 0;
   toast((auto ? '🏪 Авто-продажа: ▦ ' : '🏪 Продано на ▦ ') + fmt(gain));
   renderHud(); updateAfford();
 }
@@ -629,8 +719,8 @@ function resetGame() {
    Сброс прогресса в обмен на ⭐. Каждая ⭐ навсегда даёт +5% ко всему доходу,
    поэтому рано или поздно выгодно начать ферму заново — уже сильнее. */
 function doPrestige() {
-  const gain = prestigeGain();
-  if (gain <= 0) { toast('Мало заработано — нужно ▦ ' + fmt(1e6) + ' всего за игру'); return; }
+  const gain = Math.floor(sciToNum(prestigeGain()));   // сколько ⭐ дадут сейчас (число)
+  if (gain < 1) { toast('Мало заработано — нужно ▦ ' + fmt(1e6) + ' всего за игру'); return; }
   if (!confirm('Престиж: сбросить ферму и получить ' + gain + ' ⭐?')) return;
 
   const stars = (S.stars || 0) + gain;      // ⭐ накапливаются между престижами
@@ -649,7 +739,9 @@ function doPrestige() {
 function buildSaveJSON() {
   const r2 = v => Math.round(v * 100) / 100;      // округляем числа — код выходит короче
   return JSON.stringify({
-    px: r2(S.px), total: r2(S.total), clicks: S.clicks | 0,
+    px: { m: Math.round(S.px.m * 10000) / 10000, e: S.px.e },   // большие числа храним как {мантисса, порядок}
+    total: { m: Math.round(S.total.m * 10000) / 10000, e: S.total.e },
+    clicks: S.clicks | 0,
     harvest: r2(S.harvest), beds: S.beds, seed: S.seed,
     seeds: S.seeds, up: S.up,
     prog: S.prog.map(r2),
@@ -705,7 +797,7 @@ function importCode() {
 }
 
 function openSettings() {
-  const gain = prestigeGain();
+  const gain = Math.floor(sciToNum(prestigeGain()));   // ожидаемое количество ⭐
   modal('НАСТРОЙКИ',
     '<div class="stats">' +
     'Всего заработано: <b>▦ ' + fmt(S.total) + '</b><br>' +
@@ -768,7 +860,7 @@ function bedCard(b) {
     '<div class="meta"><div class="nm">' + b.n + '</div>' +
     '<div class="eff">Ещё одна грядка — больше урожая</div></div>' +
     '<div class="price">▦ ' + fmt(b.cost) + '</div>';
-  shopRefs.push({ el, cost: b.cost });
+  shopRefs.push({ el, cost: sciFrom(b.cost) });
   return el;
 }
 
@@ -799,7 +891,7 @@ function seedCard(s) {
     '<div class="meta"><div class="nm">' + s.n + '</div>' +
     '<div class="eff">урожай ' + fmt(s.yield) + ' за ' + s.time + 'с (клин. ' + fmt(s.yield / s.time) + '/с)</div></div>' +
     '<div class="price">▦ ' + fmt(s.cost) + '</div>';
-  shopRefs.push({ el, cost: s.cost });
+  shopRefs.push({ el, cost: sciFrom(s.cost) });
   return el;
 }
 
@@ -852,7 +944,7 @@ function renderShop(force) {
 /* Обновляем только доступность (без пересборки DOM) */
 function updateAfford() {
   for (const r of shopRefs) {
-    const can = S.px >= r.cost;
+    const can = sciGte(S.px, r.cost);
     r.el.classList.toggle('no', !can);
   }
 }
@@ -895,8 +987,9 @@ function renderHud() {
   const cap = barnCap();
   $('hvNow').textContent = fmt(S.harvest);
   $('hvCap').textContent = fmt(cap);
-  $('hvFill').style.width = clamp(S.harvest / cap * 100, 0, 100) + '%';
-  $('btnSell').textContent = '🏪 Продать урожай — ▦ ' + fmt(Math.floor(S.harvest * price()));
+  const pct = S.harvest > 0 ? clamp(S.harvest / Math.max(sciToNum(cap), 1) * 100, 0, 100) : 0;   // % заполнения амбара
+  $('hvFill').style.width = pct + '%';
+  $('btnSell').textContent = '🏪 Продать урожай — ▦ ' + fmt(sciMulS(sciFrom(S.harvest), price()));
   $('btnSell').disabled = S.harvest <= 0;
 }
 
@@ -908,14 +1001,15 @@ function updateGarden(dt) {
   const yMul = yieldMul() * allMul() * prestigeMul() * eventMul();
   const cap = barnCap();
   const yld = seedDef().yield;
+  const capNum = sciToNum(cap);                 // число-потолок амбара (упирается в безопасный предел)
   let full = false;
   for (let i = 0; i < S.beds; i++) {
     let p = (S.prog[i] || 0) + rate * dt;
     while (p >= 1) {
       p -= 1;
       const add = yld * yMul;
-      if (S.harvest + add <= cap) S.harvest += add;
-      else { S.harvest = cap; full = true; }
+      if (S.harvest + add <= capNum) S.harvest += add;
+      else { S.harvest = Math.min(capNum, S.harvest + add); full = true; }
     }
     S.prog[i] = p;
   }
@@ -923,7 +1017,7 @@ function updateGarden(dt) {
     const now = performance.now();
     if (now - lastFullToast > 4000) { lastFullToast = now; toast('📦 Амбар полон — продай урожай или купи Амбар'); }
   }
-  if (lvl('market') > 0 && S.harvest >= cap * 0.85) sellHarvest(true);   // авто-продажа с рынком
+  if (lvl('market') > 0 && sciGte(sciFrom(S.harvest), sciMulS(cap, 0.85))) sellHarvest(true);   // авто-продажа с рынком
 }
 
 /* ======================================================================
@@ -1153,7 +1247,10 @@ function loop(now) {
   lastT = now;
   if (dt > 0.5) dt = 0.5;
 
-  if (perSec() > 0) { S.px += perSec() * dt; S.total += perSec() * dt; }
+  if (perSec() > 0) {
+    const gain = sciMulS(sciFrom(perSec()), dt);        // доход за кадр как big-число
+    S.px = sciAdd(S.px, gain); S.total = sciAdd(S.total, gain);
+  }
   updateGarden(dt);
   updateEvents(dt);
   updateParts(dt);

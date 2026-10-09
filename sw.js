@@ -1,5 +1,5 @@
 /* Service Worker игры «Ферма Пикселей»: precache + cache-first */
-const CACHE = 'farm-clicker-v10';
+const CACHE = 'farm-clicker-v11';
 const ASSETS = [
   './',
   './index.html',
