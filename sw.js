@@ -1,5 +1,7 @@
-/* Service Worker игры «Ферма Пикселей»: precache + cache-first */
-const CACHE = 'farm-clicker-v15';
+/* Service Worker игры «Ферма Пикселей»: precache + cache-first + уведомление об обновлении.
+   ВАЖНО: имя кэша = версия игры. Выпустили новую версию → поменяйте CACHE ниже
+   И версию в manifest.json (поле "version") — должны совпадать. */
+const CACHE = 'farm-clicker-v16';
 const ASSETS = [
   './',
   './index.html',
@@ -19,6 +21,12 @@ self.addEventListener('activate', (e) => {
     caches.keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ type: 'window' }))
+      .then((clients) => {
+        // Новая версия установилась и уже управляет страницей.
+        // Говорим каждой открытой вкладке/окну игры: покажи табличку «Вышло обновление!».
+        clients.forEach((c) => c.postMessage({ type: 'UPDATE_READY' }));
+      })
   );
 });
 

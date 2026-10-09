@@ -170,6 +170,24 @@
     }
     @keyframes tin { from { opacity: 0; transform: translateY(-10px); } }
 
+    /* Табличка «Вышло обновление!»: поверх всего экрана (выше тостов, z-index 70).
+       Скрыта по умолчанию; показывается добавлением класса .show. */
+    #updOverlay {
+      position: fixed; inset: 0; background: rgba(6, 10, 5, .85); z-index: 70;
+      display: none; align-items: center; justify-content: center; padding: 16px;
+    }
+    #updOverlay.show { display: flex; }
+    #updCard {
+      width: 100%; max-width: 380px; background: var(--panel);
+      border: 3px solid var(--gold); border-radius: 10px; padding: 18px;
+      text-align: center; box-shadow: 0 0 0 3px #000, 0 0 34px rgba(255, 217, 94, .2);
+      animation: tin .22s ease-out;
+    }
+    #updTitle { font-size: 16px; font-weight: 800; color: var(--gold); letter-spacing: 1px; margin-bottom: 8px; }
+    #updText { font-size: 13.5px; line-height: 1.55; color: var(--dim); margin-bottom: 16px; }
+    #updBtns { display: flex; gap: 10px; justify-content: center; }
+    #updBtns .btn { flex: 1 1 0; }
+
     #starLine { color: var(--gold); }
     #eventBar {
       margin: 0 2px; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; font-weight: 700;
@@ -240,6 +258,19 @@
     </div>
   </div>
   <div id="toasts"></div>
+
+  <!-- Табличка «Вышло обновление!»: появляется при заходе, если вышла новая версия игры.
+       Работает и в браузере, и в установленном PWA. -->
+  <div id="updOverlay">
+    <div id="updCard">
+      <div id="updTitle">🔄 Вышло обновление!</div>
+      <div id="updText">Доступна новая версия игры. Обновить сейчас?</div>
+      <div id="updBtns">
+        <button id="updBtn" class="btn gold">Обновить</button>
+        <button id="updLater" class="btn ghost">Позже</button>
+      </div>
+    </div>
+  </div>
 
 <!-- Сжатие кодов сохранения: lz-string 1.5.0 (MIT, офлайн, без внешних библиотек).
      Используется функциями «Создать код» и «Загрузить код» в настройках. -->
@@ -1371,8 +1402,106 @@ $('btnInstall').onclick = () => {
   deferredPrompt.prompt();
   deferredPrompt.userChoice.finally(() => { deferredPrompt = null; $('btnInstall').hidden = true; });
 };
+
+/* ===== Табличка «Вышло обновление!» =====
+   Логика: версия игры = имя кэша в sw.js + поле version в manifest.json.
+   Случаи, когда показываем табличку при заходе:
+   1) service worker нашёл новую версию и заменил старую (события controllerchange
+      или сообщение UPDATE_READY от нового вора) — значит вышло обновление.
+   2) во время прошлого захода игрок нажал «Позже» — флаг fc_ver_pending сохранён,
+      табличка покажется снова, пока игрок не обновит.
+   3) версия в manifest.json не совпадает с той, что игрок видел раньше (запасной
+      способ проверки — для браузеров, где события воркера не сработали). */
+
+const PENDKEY = 'fc_ver_pending';   // «есть новая версия, игрок её отложил»
+const SEENKEY = 'fc_ver_seen';      // версия, которую игрок уже видел/получил
+let updateCardShown = false;        // не показываем дважды в одной сессии
+
+// Показать табличку. «Позже» скрывает её, но флаг pending остаётся —
+// при следующем заходе табличка снова появится (см. проверку ниже).
+function showUpdateCard() {
+  if (updateCardShown) return;
+  updateCardShown = true;
+  $('updOverlay').classList.add('show');
+}
+
+// Новая версия обнаружена (через service worker или manifest.json)
+function onNewVersion() {
+  localStorage.setItem(PENDKEY, '1');
+  showUpdateCard();
+}
+
+$('updBtn').onclick = () => {
+  localStorage.removeItem(PENDKEY);      // игрок решил обновиться
+  localStorage.removeItem(SEENKEY);      // версию запомним заново после перезагрузки
+  // Шаг 1: вычищаем весь кэш service worker — после перезапуска всё загрузится заново
+  // Шаг 2: перезагружаем страницу
+  caches.keys()
+    .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+    .then(() => location.reload())
+    .catch(() => location.reload());
+};
+
+$('updLater').onclick = () => {
+  $('updOverlay').classList.remove('show');   // флаг pending намеренно НЕ трогаем
+};
+
+// При заходе: если игрок в прошлый раз отложил обновление — показываем табличку сразу
+if (localStorage.getItem(PENDKEY) === '1') showUpdateCard();
+
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+  window.addEventListener('load', () => {
+    // Была ли страница под управлением старого воркера до загрузки?
+    // Если нет — это либо первая установка, либо воркер ещё не успел;
+    // в этих случаях табличку при первом заходе не показываем.
+    const hadSW = !!navigator.serviceWorker.controller;
+
+    // Новый воркер заменил старый → пришла новая версия
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hadSW) onNewVersion();
+    });
+
+    // Сообщение от нового воркера (шлётся из activate в sw.js)
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'UPDATE_READY' && hadSW) onNewVersion();
+    });
+
+// Регистрируем воркер и принудительно проверяем обновление:
+    // так игра узнает о новой версии сразу при заходе, а не в фоне.
+    navigator.serviceWorker.register('sw.js')
+      .then((reg) => reg.update().catch(() => {}))
+      .catch(() => {});
+
+    // При возврате в игру (свернули/развернули, переключили окно) — снова проверяем обновление.
+    window.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        navigator.serviceWorker.getRegistration().then((r) => r && r.update().catch(() => {}));
+      }
+    });
+
+    // Периодическая проверка: если обновление вышло, пока игра открыта и игра «потеряла»
+    // вкладку (например, стоит в фоне) — табличка появится без перезапуска.
+    setInterval(() => {
+      navigator.serviceWorker.getRegistration().then((r) => r && r.update().catch(() => {}));
+    }, 30 * 60 * 1000);
+  });
+
+  // Запасной способ: сверяем версию из manifest.json с той, что игрок уже видел.
+  // Обрабатываем отдельно, чтобы не полагаться только на события воркера.
+  (function checkManifestVersion() {
+    try {
+      fetch('./manifest.json', { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((m) => {
+          const v = String(m && m.version != null ? m.version : '');
+          if (!v) return;
+          const seen = localStorage.getItem(SEENKEY);
+          if (seen !== null && seen !== v && localStorage.getItem(PENDKEY) !== '1') onNewVersion();
+          localStorage.setItem(SEENKEY, v);   // запоминаем, какую версию предлагаем/показали
+        })
+        .catch(() => {});
+    } catch (_) {}
+  })();
 }
 
 /* ======================================================================
