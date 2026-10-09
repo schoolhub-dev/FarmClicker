@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#12180f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="Пиксельный кликер про ферму: тапай грядку, выращивай урожай, продавай на рынке и качай хозяйство.">
+  <title>Ферма Пикселей</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <style>
+    /* ===== БАЗА: тёмная тема, аккуратные шрифты, скругления ===== */
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    [hidden] { display: none !important; }
+    :root {
+      --bg: #12180f; --bg2: #0d1209; --panel: #1c2716; --panel2: #26361f;
+      --line: #35482a; --green: #86e05a; --gold: #ffd95e; --txt: #e2edd3;
+      --dim: #94a67f; --red: #ff6b5e;
+      --mono: 'Consolas', 'Menlo', 'Courier New', monospace;
+      --ui: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+    }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden; background: var(--bg);
+      font-family: var(--ui); color: var(--txt);
+      touch-action: manipulation; user-select: none; -webkit-user-select: none;
+    }
+    body { display: flex; flex-direction: column; }
+    #app { flex: 1 1 auto; display: flex; min-height: 0; }
+
+    /* ---- ЛЕВАЯ ЧАСТЬ ---- */
+    #left {
+      flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto;
+      display: flex; flex-direction: column; align-items: center; gap: 14px;
+      padding: 16px 16px 24px;
+    }
+    #topbar { position: relative; width: 100%; display: flex; justify-content: center; }
+    #counter { text-align: center; }
+    #counter .num {
+      font-family: var(--mono); font-weight: 800; color: var(--gold);
+      font-size: clamp(32px, 7.5vw, 58px); line-height: 1.05;
+      text-shadow: 3px 3px 0 #000; letter-spacing: -1px;
+    }
+    #counter .num .cur { opacity: .8; margin-right: 6px; }
+    #counter .sub { margin-top: 5px; color: var(--dim); font-size: clamp(12.5px, 2.6vw, 15px); }
+    #counter .sub b { color: var(--green); font-weight: 700; }
+    #btnSettings {
+      position: absolute; right: 0; top: 0; width: 42px; height: 42px; font-size: 19px;
+      border: 2px solid var(--line); border-radius: 10px; background: var(--panel2);
+      color: var(--txt); cursor: pointer;
+    }
+    #btnSettings:active { transform: translateY(1px); }
+
+    #gardenBtn {
+      position: relative; display: block; padding: 0; margin: 0;
+      width: min(580px, 94vw); background: #101a12;
+      border: 3px solid var(--line); border-radius: 12px; cursor: pointer;
+      overflow: hidden; box-shadow: 0 0 0 3px #060804, 0 9px 0 #060804;
+      transition: transform .04s ease, box-shadow .04s ease;
+    }
+    #gardenBtn:active { transform: translateY(3px); box-shadow: 0 0 0 3px #060804, 0 6px 0 #060804; filter: brightness(1.07); }
+    #garden { display: block; width: 100%; height: auto; image-rendering: pixelated; image-rendering: crisp-edges; pointer-events: none; }
+    #floats { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+    .float {
+      position: absolute; transform: translate(-50%, -50%); font-family: var(--mono);
+      font-weight: 800; color: var(--gold); text-shadow: 2px 2px 0 #000;
+      font-size: 17px; white-space: nowrap; pointer-events: none;
+      animation: fl .8s ease-out forwards;
+    }
+    @keyframes fl { from { opacity: 1; } to { opacity: 0; transform: translate(-50%, -190%) scale(1.15); } }
+
+    #gardenInfo {
+      background: rgba(10, 16, 8, .8); border: 2px solid var(--line); border-radius: 6px;
+      padding: 6px 12px; font-size: 13px; color: var(--green); font-weight: 700; text-align: center;
+    }
+
+    #harvestWrap { width: min(580px, 94vw); }
+    .hbar { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--dim); margin-bottom: 5px; }
+    .hbar b { color: var(--green); }
+    .track { height: 15px; background: #0d1209; border: 2px solid var(--line); border-radius: 8px; overflow: hidden; }
+    .track i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, #3f6f2a, #86e05a); transition: width .12s linear; }
+    #btnSell { margin-top: 8px; width: 100%; }
+
+    /* ---- ПРАВАЯ ЧАСТЬ: магазин ---- */
+    #shop {
+      flex: 0 0 auto; width: 380px; min-height: 0; background: var(--bg2);
+      border-left: 3px solid var(--line); display: flex; flex-direction: column;
+    }
+    #shopHead {
+      flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+      padding: 12px 14px; border-bottom: 3px solid var(--line); background: #16210f;
+    }
+    #shopHead h2 { flex: 1 1 auto; font-size: 13.5px; letter-spacing: 2px; color: var(--gold); }
+    #shopList { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 10px 12px 20px; }
+    #shopList::-webkit-scrollbar { width: 10px; }
+    #shopList::-webkit-scrollbar-thumb { background: var(--line); border-radius: 5px; }
+
+    .sec { font-size: 11.5px; letter-spacing: 1.5px; color: var(--gold); opacity: .85; margin: 14px 4px 7px; }
+    .sec:first-child { margin-top: 2px; }
+
+    .item {
+      display: flex; gap: 11px; align-items: center; padding: 9px 11px; margin-bottom: 7px;
+      background: var(--panel); border: 2px solid var(--line); border-radius: 8px;
+      cursor: pointer; transition: background .1s, border-color .1s;
+    }
+    .item:hover { background: var(--panel2); border-color: #4c613a; }
+    .item:active { transform: translateY(1px); }
+    .item .ic { flex: 0 0 auto; width: 34px; text-align: center; font-size: 24px; line-height: 1; }
+    .item .meta { flex: 1 1 auto; min-width: 0; }
+    .item .nm { font-size: 13.5px; font-weight: 700; }
+    .item .lv { color: var(--green); font-size: 11.5px; font-weight: 700; }
+    .item .eff { color: var(--dim); font-size: 11.5px; margin-top: 2px; line-height: 1.35; }
+    .item .price { flex: 0 0 auto; color: var(--gold); font-family: var(--mono); font-weight: 700; font-size: 13px; white-space: nowrap; }
+    .item.owned { border-color: var(--green); background: #1e3016; }
+    .item.on { border-color: var(--gold); box-shadow: inset 0 0 0 2px #6b5a1c; }
+    .item.on .price { color: var(--gold); }
+    .item.owned .price { color: var(--green); }
+    .item.no { opacity: .45; cursor: default; }
+    .item.no:hover { background: var(--panel); border-color: var(--line); }
+
+    .btn {
+      min-height: 42px; padding: 8px 14px; border: 2px solid var(--line); border-radius: 8px;
+      background: var(--panel2); color: var(--txt); font-family: inherit; font-size: 13px;
+      font-weight: 700; cursor: pointer;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn.pri { background: #2f5a1f; border-color: var(--green); color: var(--green); }
+    .btn.gold { background: #5a4a12; border-color: var(--gold); color: var(--gold); }
+    .btn.danger { background: #5a1d16; border-color: var(--red); color: var(--red); }
+    .btn.ghost { background: transparent; color: var(--dim); }
+    .btn:disabled { opacity: .45; cursor: default; }
+
+    #modalWrap {
+      position: fixed; inset: 0; background: rgba(6, 10, 5, .85); z-index: 50;
+      display: flex; align-items: center; justify-content: center; padding: 16px;
+    }
+    #modal {
+      width: 100%; max-width: 440px; background: var(--panel); border: 3px solid var(--gold);
+      border-radius: 10px; padding: 16px; max-height: 86vh; overflow-y: auto;
+      box-shadow: 0 0 0 3px #000, 0 0 34px rgba(255, 217, 94, .2);
+    }
+    #mTitle { font-size: 15px; color: var(--gold); margin-bottom: 10px; letter-spacing: 1px; }
+    #mBody { font-size: 13.5px; line-height: 1.6; }
+    #mBody .who { color: var(--green); font-weight: 700; margin-bottom: 4px; }
+    #mBody .stats { margin-top: 10px; font-size: 12.5px; color: var(--dim); line-height: 1.75; }
+    #mBody .stats b { color: var(--txt); }
+    #mBtns { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+
+    #toasts { position: fixed; top: 14px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 60; pointer-events: none; }
+    .toast {
+      background: #26361f; border: 2px solid var(--green); border-radius: 8px; color: var(--txt);
+      padding: 8px 14px; font-size: 12.5px; font-weight: 700; max-width: 92vw; text-align: center;
+      animation: tin .22s ease-out; box-shadow: 0 3px 0 rgba(0, 0, 0, .5);
+    }
+    @keyframes tin { from { opacity: 0; transform: translateY(-10px); } }
+
+    #starLine { color: var(--gold); }
+    #eventBar {
+      margin: 0 2px; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; font-weight: 700;
+      text-align: center; border: 2px solid var(--line); background: var(--panel);
+      animation: tin .22s ease-out;
+    }
+    #eventBar.bad  { border-color: var(--red);  color: var(--red);  background: #3a1512; }
+    #eventBar.good { border-color: var(--gold); color: var(--gold); background: #3a320f; }
+
+    @media (max-width: 820px) {
+      #app { flex-direction: column; }
+      #left { flex: 0 0 auto; gap: 12px; padding: 12px 12px 16px; }
+      #shop { flex: 1 1 auto; width: 100%; border-left: none; border-top: 3px solid var(--line); }
+      #shopList { padding: 10px 10px 24px; }
+    }
+    @media (max-width: 400px) {
+      .item .ic { width: 28px; font-size: 21px; }
+      .item .price { font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="app">
+
+    <!-- ===== ЛЕВАЯ ЧАСТЬ ===== -->
+    <section id="left">
+      <div id="topbar">
+        <div id="counter">
+          <div class="num"><span class="cur">▦</span><span id="pxTop">0</span></div>
+          <div class="sub"><b id="chRate">0</b>/сек · <b id="chClick">0</b>/клик</div>
+          <div class="sub" id="starLine" hidden>⭐ Престиж: <b id="starCount">0</b> · доход <b id="starBonus">+0%</b></div>
+        </div>
+        <button id="btnSettings" title="Настройки">⚙</button>
+      </div>
+
+      <button id="gardenBtn" aria-label="Тапай по грядке">
+        <canvas id="garden" width="260" height="170"></canvas>
+        <div id="floats"></div>
+      </button>
+
+      <div id="gardenInfo">🌾 Пшеница · Грядок: 1</div>
+
+      <div id="eventBar" hidden></div>
+
+      <div id="harvestWrap">
+        <div class="hbar"><span>🧺 Урожай в амбаре</span><span><b id="hvNow">0</b> / <b id="hvCap">200</b></span></div>
+        <div class="track"><i id="hvFill"></i></div>
+        <button id="btnSell" class="btn gold">🏪 Продать урожай — ▦ 0</button>
+      </div>
+
+      <button id="btnInstall" class="btn ghost" hidden>⬇ Установить приложение</button>
+    </section>
+
+    <!-- ===== ПРАВАЯ ЧАСТЬ: магазин ===== -->
+    <aside id="shop">
+      <div id="shopHead"><h2>УЛУЧШЕНИЯ</h2></div>
+      <div id="shopList"></div>
+    </aside>
+
+  </div>
+
+  <div id="modalWrap" hidden>
+    <div id="modal">
+      <h3 id="mTitle"></h3>
+      <div id="mBody"></div>
+      <div id="mBtns"></div>
+    </div>
+  </div>
+  <div id="toasts"></div>
+
+<script>
+/* ======================================================================
+   ФЕРМА ПИКСЕЛЕЙ — браузерный кликер про ферму (один файл, Cookie Clicker)
+   Экономика: клик по грядке → пиксели; улучшения дают PPS и множители;
+   семена растут на грядках, урожай копится в амбаре и продаётся на рынке.
+
+   Магазин: 7 категорий, >40 позиций.
+   • Хранилище/апгрейды клика, PPS, роста, урожая — МНОГОРАЗОВЫЕ (показывают уровень).
+   • Семена и грядки — ОДНОРАЗОВЫЕ: после покупки исчезают из списка.
+   ====================================================================== */
+
+const SAVE_KEY = 'farm_clicker_v3';           // ключ в localStorage (v3 — новая структура)
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const MAX_BEDS = 40;                           // предел для «бесконечной» грядки
+
+/* Короткий формат больших чисел: 1.2K, 3.4M, 5.6B ... */
+function fmt(n) {
+  n = Math.floor(n);
+  if (n < 1000) return '' + n;
+  const u = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc'];
+  let i = 0;
+  while (n >= 1000 && i < u.length - 1) { n /= 1000; i++; }
+  return n.toFixed(n < 10 ? 2 : n < 100 ? 1 : 0) + u[i];
+}
+
+/* ===== СЕМЕНА (одноразовые): 45 культур по возрастанию цены =====
+   СЛОЖНЫЙ БАЛАНС: культуры дорогие, а урожай за созревание растёт медленно,
+   поэтому за большими семенами нужно долго копить. Порядок: базовые → средние →
+   дорогие → эпические → легендарные. time — секунды роста, yield — урожай за созревание,
+   shape — вид растения (stalk/leafy/bush/ball/vine/sun/tree), glow — свечение элитных. */
+const SEEDS = [
+  // ---------- БАЗОВЫЕ (10): дёшево, растут быстро, но урожай маленький ----------
+  { id: 'wheat',    n: 'Пшеница',           ic: '🌾', cost: 0,     time: 4,  yield: 3,     shape: 'stalk', stem: '#8fbe3f', head: '#e9c84a' },
+  { id: 'carrot',   n: 'Морковь',           ic: '🥕', cost: 300,   time: 6,  yield: 9,     shape: 'leafy', stem: '#59b54a', head: '#ff8b3d' },
+  { id: 'potato',   n: 'Картофель',         ic: '🥔', cost: 2200,  time: 7,  yield: 26,    shape: 'bush',  stem: '#4f9a3a', head: '#d9b26a' },
+  { id: 'beet',     n: 'Свёкла',            ic: '🍠', cost: 7000,  time: 7,  yield: 60,    shape: 'leafy', stem: '#4f9a3a', head: '#a3315e' },
+  { id: 'turnip',   n: 'Репа',              ic: '🌰', cost: 20000, time: 8,  yield: 130,   shape: 'leafy', stem: '#6fae3a', head: '#e8d8b0' },
+  { id: 'cabbage',  n: 'Капуста',           ic: '🥬', cost: 55000, time: 8,  yield: 280,   shape: 'bush',  stem: '#6fae3a', head: '#9fd86a' },
+  { id: 'onion',    n: 'Лук',               ic: '🧅', cost: 140000,time: 9,  yield: 600,   shape: 'leafy', stem: '#7fb84a', head: '#e0c07a' },
+  { id: 'garlic',   n: 'Чеснок',            ic: '🧄', cost: 320000,time: 9,  yield: 1300,  shape: 'leafy', stem: '#8fbe3f', head: '#efe9d8' },
+  { id: 'cucumber', n: 'Огурец',            ic: '🥒', cost: 700000,time: 10, yield: 2800,  shape: 'bush',  stem: '#5fae3a', head: '#4fae2a' },
+  { id: 'tomato',   n: 'Помидор',           ic: '🍅', cost: 1.5e6, time: 10, yield: 6000,  shape: 'bush',  stem: '#4f9a3a', head: '#e5483a' },
+  // ---------- СРЕДНИЕ (10) ----------
+  { id: 'pumpkin',  n: 'Тыква',             ic: '🎃', cost: 3.4e6, time: 11, yield: 12000, shape: 'ball',  stem: '#4f9a3a', head: '#ff8b2b' },
+  { id: 'melon',    n: 'Арбуз',             ic: '🍉', cost: 7.5e6, time: 12, yield: 26000, shape: 'ball',  stem: '#4f9a3a', head: '#5fb84a' },
+  { id: 'honeydew', n: 'Дыня',              ic: '🍈', cost: 1.6e7, time: 12, yield: 55000, shape: 'ball',  stem: '#4f9a3a', head: '#d9c26a' },
+  { id: 'corn',     n: 'Кукуруза',          ic: '🌽', cost: 3.4e7, time: 12, yield: 115000,shape: 'stalk', stem: '#6fae3a', head: '#ffd94a' },
+  { id: 'sun',      n: 'Подсолнух',         ic: '🌻', cost: 7.5e7, time: 13, yield: 240000,shape: 'sun',   stem: '#4f9a3a', head: '#ffd23d' },
+  { id: 'eggplant', n: 'Баклажан',          ic: '🍆', cost: 1.6e8, time: 13, yield: 5e5,   shape: 'bush',  stem: '#4f9a3a', head: '#7a4fa8' },
+  { id: 'pepper',   n: 'Перец',             ic: '🌶️', cost: 3.4e8, time: 14, yield: 1.05e6,shape: 'bush',  stem: '#4f9a3a', head: '#e5483a' },
+  { id: 'zucchini', n: 'Кабачок',           ic: '🥒', cost: 7.5e8, time: 14, yield: 2.2e6, shape: 'bush',  stem: '#4f9a3a', head: '#6fae3a' },
+  { id: 'grape',    n: 'Виноград',          ic: '🍇', cost: 1.6e9, time: 15, yield: 4.7e6, shape: 'vine',  stem: '#4f9a3a', head: '#9b59d0' },
+  { id: 'pineapple',n: 'Ананас',            ic: '🍍', cost: 3.4e9, time: 15, yield: 9.8e6, shape: 'bush',  stem: '#4f9a3a', head: '#e0b23a' },
+  // ---------- ДОРОГИЕ (10): фруктовые деревья ----------
+  { id: 'mango',    n: 'Манго',             ic: '🥭', cost: 1.12e10,time: 16, yield: 1.6e7, shape: 'tree',  stem: '#3f7a34', head: '#ffb347' },
+  { id: 'banana',   n: 'Банан',             ic: '🍌', cost: 2.4e10,time: 16, yield: 3.4e7, shape: 'tree',  stem: '#3f7a34', head: '#ffe14f' },
+  { id: 'kiwi',     n: 'Киви',              ic: '🥝', cost: 5.2e10,time: 17, yield: 7e7,   shape: 'tree',  stem: '#3f7a34', head: '#a5894a' },
+  { id: 'pomegranate',n:'Гранат',           ic: '🍎', cost: 1.12e11,time: 17, yield: 1.5e8, shape: 'tree',  stem: '#3f7a34', head: '#c0392b' },
+  { id: 'fig',      n: 'Инжир',             ic: '🫐', cost: 2.4e11,time: 18, yield: 3.2e8, shape: 'tree',  stem: '#3f7a34', head: '#8e5aa8' },
+  { id: 'papaya',   n: 'Папайя',            ic: '🍈', cost: 5.2e11,time: 18, yield: 7e8,   shape: 'tree',  stem: '#3f7a34', head: '#ff9a3a' },
+  { id: 'coconut',  n: 'Кокос',             ic: '🥥', cost: 1.12e12,time: 19, yield: 1.45e9,shape: 'tree',  stem: '#3f7a34', head: '#8a5a2b' },
+  { id: 'avocado',  n: 'Авокадо',           ic: '🥑', cost: 2.4e12,time: 19, yield: 3.1e9, shape: 'tree',  stem: '#3f7a34', head: '#6fae3a' },
+  { id: 'lemon',    n: 'Лимон',             ic: '🍋', cost: 5.2e12,time: 20, yield: 6.5e9, shape: 'tree',  stem: '#3f7a34', head: '#ffe14f' },
+  { id: 'lime',     n: 'Лайм',              ic: '🍏', cost: 1.12e13,time: 20, yield: 1.4e10,shape: 'tree',  stem: '#3f7a34', head: '#9fe04a' },
+  // ---------- ЭПИЧЕСКИЕ (10): светятся ----------
+  { id: 'goldwheat',n: 'Золотая пшеница',   ic: '🌾', cost: 2.4e13,time: 21, yield: 3e10,  shape: 'stalk', stem: '#c9a227', head: '#ffe14f', glow: true },
+  { id: 'goldcarrot',n:'Золотая морковь',   ic: '🥕', cost: 5.2e13,time: 21, yield: 6.5e10,shape: 'leafy', stem: '#c9a227', head: '#ffcf40', glow: true },
+  { id: 'goldmelon',n: 'Золотой арбуз',     ic: '🍉', cost: 1.12e14,time: 22, yield: 1.4e11,shape: 'ball',  stem: '#c9a227', head: '#ffd95e', glow: true },
+  { id: 'crystalpumpkin',n:'Кристальная тыква',ic:'🎃',cost:2.4e14,time: 22, yield: 3e11,  shape: 'ball',  stem: '#5fa8c0', head: '#7fe0ff', glow: true },
+  { id: 'diamondgrape',n:'Алмазный виноград',ic:'🍇', cost: 5.2e14,time: 23, yield: 6.5e11,shape: 'vine',  stem: '#6fa8c0', head: '#bfeaff', glow: true },
+  { id: 'emeraldpineapple',n:'Изумрудный ананас',ic:'🍍',cost:1.12e15,time:23, yield: 1.4e12,shape:'bush', stem: '#3f9a70', head: '#3fe0a0', glow: true },
+  { id: 'rubypomegranate',n:'Рубиновый гранат',ic:'🍎',cost:2.4e15,time: 24, yield: 3e12,  shape: 'tree',  stem: '#7a2a34', head: '#ff3a6a', glow: true },
+  { id: 'sapphirecorn',n:'Сапфировая кукуруза',ic:'🌽',cost:5.2e15,time:24, yield: 6.5e12,shape:'stalk', stem: '#3f6fae', head: '#4f9bff', glow: true },
+  { id: 'moonwheat',n: 'Лунная пшеница',    ic: '🌙', cost: 1.12e16,time:25, yield: 1.4e13,shape: 'stalk', stem: '#8f9ad0', head: '#dfe8ff', glow: true },
+  { id: 'solarsunflower',n:'Солнечный подсолнух',ic:'🌞',cost:2.4e16,time:25, yield: 3e13, shape: 'sun',   stem: '#c9a227', head: '#fff08a', glow: true },
+  // ---------- ЛЕГЕНДАРНЫЕ (5): максимум ----------
+  { id: 'cosmicwheat',n: 'Космическая пшеница',ic:'🌌',cost: 5.2e16,time:27, yield: 6.5e13,shape:'stalk', stem: '#7a5ad0', head: '#b48aff', glow: true },
+  { id: 'galacticmelon',n:'Галактический арбуз',ic:'🍉',cost:1.12e17,time:28, yield: 1.4e14,shape:'ball', stem: '#5a3aa0', head: '#8a5aff', glow: true },
+  { id: 'blackholeseed',n:'Чёрная дыра',    ic: '🕳️', cost: 2.4e17,time:29, yield: 3e14,  shape: 'ball',  stem: '#3a2a5a', head: '#2a1a4a', glow: true },
+  { id: 'timeparadox',n: 'Временной парадокс',ic:'⏳',cost: 5.2e17,time:30, yield: 6.5e14,shape: 'sun',   stem: '#3fb0b0', head: '#7ffff0', glow: true },
+  { id: 'infinitepineapple',n:'Бесконечный ананас',ic:'🍍',cost:1.12e18,time:32,yield:1.4e15,shape:'bush', stem: '#c9a227', head: '#ffe14f', glow: true },
+];
+
+/* ===== ГРЯДКИ (одноразовые): покупаются строго по порядку =====
+   bed2→bed5 покупаются последовательно; после пятой открывается «бесконечная». */
+const BEDS = [
+  { id: 'bed2', n: 'Вторая грядка',   ic: '🟫', cost: 150,    beds: 2 },
+  { id: 'bed3', n: 'Третья грядка',   ic: '🟫', cost: 1050,   beds: 3 },
+  { id: 'bed4', n: 'Четвёртая грядка',ic: '🟫', cost: 7350,   beds: 4 },
+  { id: 'bed5', n: 'Пятая грядка',    ic: '🟫', cost: 51450,  beds: 5 },
+];
+
+/* ===== АПГРЕЙДЫ (многоразовые, показывают уровень) =====
+   Сложный баланс: цены растут ×2–×3 за уровень (g), а прибавка к доходу — небольшая.
+   Поэтому прокачать всё сразу нельзя — приходится выбирать, что важнее.
+   Исключение — Амбар: дешёвый (цена ×1.15 за уровень) и даёт ×2.2 лимита, чтобы окупался.
+   kind: clickFlat/clickMul — клик, autoFlat/autoMul — PPS,
+         growMul — скорость роста, yieldMul — размер урожая,
+         barnCap — лимит амбара, priceMul — цена, allMul — ко всему доходу. */
+const UPG = [
+  // ---- КЛИК (дорого, прибавка маленькая) ----
+  { id: 'shovel',   n: 'Лопата',           ic: '⛏️', sec: 'КЛИК',    desc: '+2 к пикселям за клик',    base: 40,     g: 2.00, kind: 'clickFlat', val: 2 },
+  { id: 'glove',    n: 'Перчатки',          ic: '🧤', sec: 'КЛИК',    desc: '+8% к пикселям за клик',   base: 800,    g: 2.10, kind: 'clickMul',  val: 0.08 },
+  { id: 'combine',  n: 'Комбайн',           ic: '🛻', sec: 'КЛИК',    desc: '+10 к пикселям за клик',   base: 20000,  g: 2.20, kind: 'clickFlat', val: 10 },
+  { id: 'drone',    n: 'Дрон',              ic: '🛸', sec: 'КЛИК',    desc: '+12% к пикселям за клик',  base: 9e5,    g: 2.30, kind: 'clickMul',  val: 0.12 },
+  { id: 'exo',      n: 'Экзоскелет',        ic: '🦾', sec: 'КЛИК',    desc: '+20% к пикселям за клик',  base: 5e7,    g: 2.50, kind: 'clickMul',  val: 0.2 },
+  // ---- АВТОКЛИК (PPS) ----
+  { id: 'watering', n: 'Дождевание',        ic: '💧', sec: 'АВТОКЛИК',desc: '+2 к автоклику',           base: 150,    g: 2.00, kind: 'autoFlat',  val: 2 },
+  { id: 'tractor',  n: 'Трактор',           ic: '🚜', sec: 'АВТОКЛИК',desc: '+10% к автоклику',         base: 8000,   g: 2.15, kind: 'autoMul',   val: 0.10 },
+  { id: 'worker',   n: 'Рабочие',           ic: '👷', sec: 'АВТОКЛИК',desc: '+15 к автоклику',          base: 25000,  g: 2.20, kind: 'autoFlat',  val: 15 },
+  { id: 'solar',    n: 'Солнечные панели',  ic: '🔆', sec: 'АВТОКЛИК',desc: '+15% к автоклику (энергия)',base: 7e5,   g: 2.30, kind: 'autoMul',  val: 0.15 },
+  { id: 'robots',   n: 'Роботы',            ic: '🤖', sec: 'АВТОКЛИК',desc: '+120 к автоклику',         base: 5e7,    g: 2.40, kind: 'autoFlat',  val: 120 },
+  { id: 'ai',       n: 'ИИ-фермер',         ic: '🧠', sec: 'АВТОКЛИК',desc: '+35% к автоклику',         base: 1e9,    g: 2.60, kind: 'autoMul',   val: 0.35 },
+  // ---- РОСТ ----
+  { id: 'fertilizer',n:'Удобрение',         ic: '🧪', sec: 'РОСТ',     desc: '+15% к скорости роста',    base: 250,    g: 2.05, kind: 'growMul',   val: 0.15 },
+  { id: 'bees',     n: 'Пчёлы',             ic: '🐝', sec: 'РОСТ',     desc: '+18% к скорости роста',    base: 15000,  g: 2.20, kind: 'growMul',   val: 0.18 },
+  { id: 'greenhouse',n:'Теплица',           ic: '🌡️', sec: 'РОСТ',     desc: '+22% к скорости роста',    base: 4e5,    g: 2.30, kind: 'growMul',   val: 0.22 },
+  { id: 'hydro',    n: 'Гидропоника',       ic: '💦', sec: 'РОСТ',     desc: '+30% к скорости роста',    base: 8e6,    g: 2.40, kind: 'growMul',   val: 0.30 },
+  { id: 'genetics', n: 'Генетика',          ic: '🧬', sec: 'РОСТ',     desc: '+45% к скорости роста',    base: 3e8,    g: 2.50, kind: 'growMul',   val: 0.45 },
+  { id: 'magic',    n: 'Магия',             ic: '✨', sec: 'РОСТ',     desc: '+70% к скорости роста',    base: 1.5e10, g: 2.70, kind: 'growMul',   val: 0.70 },
+  // ---- УРОЖАЙ ----
+  { id: 'collector',n: 'Сборщики',          ic: '🧺', sec: 'УРОЖАЙ',   desc: '+12% к размеру урожая',    base: 500,    g: 2.10, kind: 'yieldMul',  val: 0.12 },
+  { id: 'orangery', n: 'Оранжерея',         ic: '🏡', sec: 'УРОЖАЙ',   desc: '+22% к размеру урожая',    base: 1e5,    g: 2.30, kind: 'yieldMul',  val: 0.22 },
+  { id: 'barn',     n: 'Амбар',             ic: '📦', sec: 'УРОЖАЙ',   desc: '×2.2 к лимиту хранения',   base: 150,    g: 1.15, kind: 'barnCap',   val: 2.2 },
+  { id: 'market',   n: 'Рынок',             ic: '🏪', sec: 'УРОЖАЙ',   desc: '+12% к цене и авто-продажа',base: 1200,  g: 2.15, kind: 'priceMul',  val: 0.12 },
+  { id: 'logistics',n: 'Логистика',         ic: '🚚', sec: 'УРОЖАЙ',   desc: '+30% к размеру урожая',    base: 4e6,    g: 2.40, kind: 'yieldMul',  val: 0.3 },
+  { id: 'export',   n: 'Экспорт',           ic: '🚢', sec: 'УРОЖАЙ',   desc: '+25% к цене продажи',      base: 3e8,    g: 2.50, kind: 'priceMul',  val: 0.25 },
+  // ---- ОСОБЫЕ (самые дорогие, ×3 за уровень) ----
+  { id: 'portal',   n: 'Портал',            ic: '🌀', sec: 'ОСОБЫЕ',   desc: '+25% ко всему доходу',     base: 1e10,   g: 3.00, kind: 'allMul',    val: 0.25 },
+  { id: 'timemachine',n:'Машина времени',   ic: '⏳', sec: 'ОСОБЫЕ',   desc: '+35% ко всему доходу',     base: 1e12,   g: 3.00, kind: 'allMul',    val: 0.35 },
+  { id: 'blackhole',n: 'Чёрная дыра',       ic: '🕳️', sec: 'ОСОБЫЕ',   desc: '+50% ко всему доходу',     base: 1e14,   g: 3.10, kind: 'allMul',    val: 0.5 },
+  { id: 'mars',     n: 'Ферма на Марсе',    ic: '🚀', sec: 'ОСОБЫЕ',   desc: '+80% ко всему доходу',     base: 1e16,   g: 3.20, kind: 'allMul',    val: 0.8 },
+];
+
+/* Порядок категорий в магазине */
+const SEC_ORDER = ['ГРЯДКИ', 'СЕМЕНА', 'КЛИК', 'АВТОКЛИК', 'РОСТ', 'УРОЖАЙ', 'ОСОБЫЕ'];
+
+/* ===== Состояние ===== */
+function defState() {
+  const up = {};
+  UPG.forEach(u => up[u.id] = 0);
+  return {
+    px: 0, total: 0, clicks: 0,
+    harvest: 0,          // урожай в амбаре (единицы)
+    beds: 1,             // число грядок
+    seed: 'wheat',       // активное (последнее купленное) семя
+    seeds: { wheat: true },
+    up,
+    prog: [0],           // прогресс роста по каждой грядке
+    stars: 0,            // ⭐ престиж: навсегда увеличивают весь доход
+    started: false,
+  };
+}
+let S = defState();
+
+/* ===== РЕДКИЕ СОБЫТИЯ =====
+   Иногда на ферму обрушиваются неприятности (доход падает) или радости (доход растёт).
+   Событие действует ограниченное время и показывает баннер под игровым полем. */
+let ev = null;                                    // текущее событие { n, ic, mul, bad, dur, t } или null
+let nextEventIn = 50 + Math.random() * 50;        // секунд до следующего события
+const EVENTS = [
+  { n: 'Засуха',    ic: '🌞', mul: 0.5,  bad: true,  dur: [15, 25] },
+  { n: 'Вредители', ic: '🐛', mul: 0.6,  bad: true,  dur: [12, 20] },
+  { n: 'Град',      ic: '🌨️', mul: 0.55, bad: true,  dur: [10, 18] },
+  { n: 'Саранча',   ic: '🦗', mul: 0.45, bad: true,  dur: [8, 16] },
+  { n: 'Ярмарка',   ic: '🎉', mul: 2.0,  bad: false, dur: [12, 18] },
+  { n: 'Дожди',     ic: '🌧️', mul: 1.8,  bad: false, dur: [15, 25] },
+];
+function updateEvents(dt) {
+  if (ev) {                                       // событие активно — тикаем таймер
+    ev.t -= dt;
+    if (ev.t <= 0) { toast('Событие «' + ev.n + '» закончилось'); ev = null; }
+    return;
+  }
+  if (S.total < 500) return;                      // в самом начале игрока не трогаем
+  nextEventIn -= dt;
+  if (nextEventIn > 0) return;
+  const e = EVENTS[Math.floor(Math.random() * EVENTS.length)];
+  const dur = e.dur[0] + Math.random() * (e.dur[1] - e.dur[0]);
+  ev = { n: e.n, ic: e.ic, mul: e.mul, bad: e.bad, dur, t: dur };
+  nextEventIn = 50 + Math.random() * 70;
+  toast((e.bad ? '⚠️ ' : '🎊 ') + e.n + ': доход ×' + e.mul + ' на ' + Math.round(dur) + 'с');
+}
+
+/* Флаг сброса: пока true — автосейв молчит, чтобы не вернуть только что стёртые данные */
+let resetting = false;
+function save() {
+  if (resetting) return;                                   // во время сброса не сохраняем ничего
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {}
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return false;
+    const o = JSON.parse(raw);
+    S = Object.assign(defState(), o);
+    S.seeds = Object.assign({ wheat: true }, o.seeds);
+    S.up = Object.assign(defState().up, o.up);
+    if (!S.seeds[S.seed]) S.seed = 'wheat';
+    S.beds = clamp(S.beds | 0, 1, MAX_BEDS);
+    S.prog = Array.isArray(o.prog) ? o.prog.slice(0, S.beds) : [];
+    while (S.prog.length < S.beds) S.prog.push(0);
+    return true;
+  } catch (e) { return false; }
+}
+
+/* ===== Формулы экономики ===== */
+function seedDef() { return SEEDS.find(s => s.id === S.seed) || SEEDS[0]; }
+function lvl(id) { return S.up[id] || 0; }
+function clickFlat() { return 1 + lvl('shovel') * 2 + lvl('combine') * 10; }
+function clickMul() { return 1 + lvl('glove') * 0.08 + lvl('drone') * 0.12 + lvl('exo') * 0.2; }
+function autoFlat() { return lvl('watering') * 2 + lvl('worker') * 15 + lvl('robots') * 120; }
+function autoMul() { return (1 + lvl('tractor') * 0.10 + lvl('solar') * 0.15 + lvl('ai') * 0.35); }
+function growMul() { return (1 + lvl('fertilizer') * 0.15 + lvl('bees') * 0.18 + lvl('greenhouse') * 0.22 + lvl('hydro') * 0.3 + lvl('genetics') * 0.45 + lvl('magic') * 0.7); }
+function yieldMul() { return (1 + lvl('collector') * 0.12 + lvl('orangery') * 0.22 + lvl('logistics') * 0.3); }
+function allMul() { return (1 + lvl('portal') * 0.25 + lvl('timemachine') * 0.35 + lvl('blackhole') * 0.5 + lvl('mars') * 0.8); }
+function barnCap() { return Math.floor(150 * Math.pow(2.2, lvl('barn'))); }   // амбар: ×2.2 к лимиту за уровень
+function price() { return 1 + lvl('market') * 0.12 + lvl('export') * 0.25; }
+/* Престиж: каждая ⭐ даёт +5% ко всему доходу (складывается с прочими множителями) */
+function prestigeGain() { return Math.floor(Math.sqrt(S.total / 1e4)); }      // сколько ⭐ дадут за текущий прогресс
+function prestigeMul() { return 1 + (S.stars || 0) * 0.05; }
+/* Редкие события: временно меняют доход (засуха, вредители — снижают, ярмарка — повышает) */
+function eventMul() { return ev ? ev.mul : 1; }
+function perClick() { return clickFlat() * clickMul() * allMul() * prestigeMul() * eventMul(); }
+function perSec() { return autoFlat() * autoMul() * allMul() * prestigeMul() * eventMul(); }
+function upCost(u) { return Math.floor(u.base * Math.pow(u.g, lvl(u.id))); }
+/* Цена «бесконечной» грядки растёт по числу грядок сверх пятой */
+function infBedCost() { return Math.floor(360000 * Math.pow(3.2, S.beds - 5)); }
+
+/* ===== Тост ===== */
+let lastFullToast = 0;
+function toast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  $('toasts').appendChild(t);
+  setTimeout(() => t.remove(), 2500);
+}
+
+/* ===== Модалка ===== */
+function modal(title, html, buttons) {
+  $('mTitle').textContent = title;
+  $('mBody').innerHTML = html;
+  const box = $('mBtns');
+  box.innerHTML = '';
+  (buttons || [{ label: 'OK' }]).forEach(b => {
+    const el = document.createElement('button');
+    el.className = 'btn ' + (b.cls || 'pri');
+    el.textContent = b.label;
+    el.onclick = () => { closeModal(); if (b.fn) b.fn(); };
+    box.appendChild(el);
+  });
+  $('modalWrap').hidden = false;
+}
+function closeModal() { $('modalWrap').hidden = true; }
+
+/* ======================================================================
+   ДЕЙСТВИЯ
+   ====================================================================== */
+function tap(e) {
+  const gain = perClick();
+  S.px += gain; S.total += gain; S.clicks++;
+  const r = cv.getBoundingClientRect();
+  const sx = clamp(e.clientX - r.left, 2, r.width - 2);
+  const sy = clamp(e.clientY - r.top, 2, r.height - 2);
+  burst(sx / r.width * W, sy / r.height * H, 7);
+  floatText(sx, sy, '+' + fmt(gain));
+  renderHud(); updateAfford();
+}
+
+/* Покупка многоразового улучшения */
+function buyUp(id) {
+  const u = UPG.find(x => x.id === id);
+  const cost = upCost(u);
+  if (S.px < cost) { toast('Нужно ▦ ' + fmt(cost)); return; }
+  S.px -= cost;
+  S.up[id]++;
+  toast('🛠 ' + u.n + ' ур. ' + S.up[id]);
+  renderShop(true); renderHud();
+}
+
+/* Покупка семени (одноразово): после покупки исчезает из списка, становится активным */
+function buySeed(id) {
+  const s = SEEDS.find(x => x.id === id);
+  if (S.seeds[id]) return;                       // уже куплено — не должно случаться
+  if (S.px < s.cost) { toast('Нужно ▦ ' + fmt(s.cost)); return; }
+  S.px -= s.cost;
+  S.seeds[id] = true;
+  S.seed = id;                                    // засеваем новинку
+  toast('🌱 Засеяно: ' + s.n + '!');
+  bigBurst();
+  renderShop(true); renderHud();
+}
+
+/* Покупка одноразовой грядки (2..5), строго по порядку */
+function buyBedTo(n) {
+  const b = BEDS.find(x => x.beds === n);
+  if (S.beds >= n) return;
+  if (S.beds !== n - 1) { toast('Сначала купи предыдущую грядку'); return; }
+  if (S.px < b.cost) { toast('Нужно ▦ ' + fmt(b.cost)); return; }
+  S.px -= b.cost;
+  S.beds = n;
+  S.prog.push(0);
+  toast('🌱 Грядок стало: ' + n);
+  bigBurst();
+  renderShop(true); renderHud();
+}
+
+/* Покупка «бесконечной» грядки (появляется после пятой) */
+function buyBedInf() {
+  if (S.beds >= MAX_BEDS) { toast('Достигнут предел грядок (' + MAX_BEDS + ')'); return; }
+  const cost = infBedCost();
+  if (S.px < cost) { toast('Нужно ▦ ' + fmt(cost)); return; }
+  S.px -= cost;
+  S.beds++;
+  S.prog.push(0);
+  toast('🌱 Бесконечная грядка: ' + S.beds + ' шт.');
+  bigBurst();
+  renderShop(true); renderHud();
+}
+
+/* Продажа урожая */
+function sellHarvest(auto) {
+  if (S.harvest <= 0) { if (!auto) toast('Амбар пуст'); return; }
+  const gain = Math.floor(S.harvest * price());
+  S.px += gain; S.total += gain; S.harvest = 0;
+  toast((auto ? '🏪 Авто-продажа: ▦ ' : '🏪 Продано на ▦ ') + fmt(gain));
+  renderHud(); updateAfford();
+}
+
+/* ===== Сброс прогресса =====
+   Полностью стирает сохранение и возвращает игру к началу. */
+function resetGame() {
+  // 4) Спрашиваем подтверждение перед сбросом
+  if (!confirm('Точно сбросить прогресс?')) return;
+
+  resetting = true;                                        // 1) глушим автосейв (иначе beforeunload вернёт прогресс)
+
+  // 2) Полностью очищаем localStorage и ключ сохранения
+  try { localStorage.clear(); } catch (e) {}
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+
+  // 3) Сбрасываем данные, хранящиеся в переменных, к начальным значениям
+  S = defState();
+  shopStructKey = '';                                      // сброс магазина — перерисуется заново
+  shopRefs = [];
+
+  // 5) Перезагружаем страницу: улучшения, семена, пиксели и грядки — как в начале
+  location.reload();
+}
+
+/* ===== ПРЕСТИЖ =====
+   Сброс прогресса в обмен на ⭐. Каждая ⭐ навсегда даёт +5% ко всему доходу,
+   поэтому рано или поздно выгодно начать ферму заново — уже сильнее. */
+function doPrestige() {
+  const gain = prestigeGain();
+  if (gain <= 0) { toast('Мало заработано — нужно ▦ ' + fmt(1e6) + ' всего за игру'); return; }
+  if (!confirm('Престиж: сбросить ферму и получить ' + gain + ' ⭐?')) return;
+
+  const stars = (S.stars || 0) + gain;      // ⭐ накапливаются между престижами
+  S = defState();
+  S.stars = stars;
+  S.started = true;
+  shopStructKey = ''; shopRefs = [];
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {}
+  location.reload();
+}
+
+function openSettings() {
+  const gain = prestigeGain();
+  modal('НАСТРОЙКИ',
+    '<div class="stats">' +
+    'Всего заработано: <b>▦ ' + fmt(S.total) + '</b><br>' +
+    'Кликов сделано: <b>' + S.clicks + '</b><br>' +
+    'Пикселей за клик: <b>▦ ' + fmt(perClick()) + '</b><br>' +
+    'Автоклик (PPS): <b>▦ ' + fmt(perSec()) + '/с</b><br>' +
+    'Активное семя: <b>' + seedDef().ic + ' ' + seedDef().n + '</b><br>' +
+    'Грядок: <b>' + S.beds + '</b> · Урожай: <b>' + fmt(S.harvest) + ' / ' + fmt(barnCap()) + '</b>' +
+    '</div>' +
+    '<div class="stats">' +
+    '⭐ <b>Престиж</b>: у вас <b>' + (S.stars || 0) + '</b> ⭐ · бонус к доходу <b>+' +
+      Math.round((prestigeMul() - 1) * 100) + '%</b><br>' +
+    'Сейчас можно получить: <b>' + gain + '</b> ⭐ (сброс всей фермы, но ⭐ остаются).' +
+    '</div>',
+    [
+      { label: '⭐ Престиж: сбросить за ' + gain + ' ⭐', cls: 'gold', fn: doPrestige },
+      { label: '🗑 Сбросить прогресс', cls: 'danger', fn: resetGame },
+      { label: 'Продолжить', cls: 'pri', fn: save },
+    ]);
+}
+
+/* ======================================================================
+   МАГАЗИН
+   ====================================================================== */
+let shopRefs = [];
+let shopStructKey = '';
+
+/* Ключ структуры: пересобираем DOM только при изменениях (покупки/уровни) */
+function structKey() {
+  const seedsOwned = SEEDS.map(s => (S.seeds[s.id] ? 1 : 0)).join('');
+  const lvls = UPG.map(u => lvl(u.id)).join(',');
+  return S.beds + '|' + seedsOwned + '|' + lvls;
+}
+function secEl(title) {
+  const d = document.createElement('div');
+  d.className = 'sec';
+  d.textContent = title;
+  return d;
+}
+
+/* Карточка одноразовой грядки (из BEDS) */
+function bedCard(b) {
+  const el = document.createElement('div');
+  el.className = 'item';
+  el.dataset.act = 'bed:' + b.beds;
+  el.innerHTML =
+    '<div class="ic">' + b.ic + '</div>' +
+    '<div class="meta"><div class="nm">' + b.n + '</div>' +
+    '<div class="eff">Ещё одна грядка — больше урожая</div></div>' +
+    '<div class="price">▦ ' + fmt(b.cost) + '</div>';
+  shopRefs.push({ el, cost: b.cost });
+  return el;
+}
+
+/* Карточка «бесконечной» грядки (многоразовая) */
+function infBedCard() {
+  const max = S.beds >= MAX_BEDS;
+  const cost = infBedCost();
+  const lv = S.beds - 5;
+  const el = document.createElement('div');
+  el.className = 'item' + (max ? ' owned' : '');
+  el.dataset.act = 'bedInf';
+  el.innerHTML =
+    '<div class="ic">♾️</div>' +
+    '<div class="meta"><div class="nm">Бесконечная грядка <span class="lv">ур. ' + lv + '</span></div>' +
+    '<div class="eff">' + (max ? 'Максимум достигнут' : '+1 грядка каждый уровень') + '</div></div>' +
+    '<div class="price">' + (max ? '✓' : '▦ ' + fmt(cost)) + '</div>';
+  if (!max) shopRefs.push({ el, cost });
+  return el;
+}
+
+/* Карточка семени (одноразовая) */
+function seedCard(s) {
+  const el = document.createElement('div');
+  el.className = 'item';
+  el.dataset.act = 'seed:' + s.id;
+  el.innerHTML =
+    '<div class="ic">' + s.ic + '</div>' +
+    '<div class="meta"><div class="nm">' + s.n + '</div>' +
+    '<div class="eff">урожай ' + fmt(s.yield) + ' за ' + s.time + 'с (клин. ' + fmt(s.yield / s.time) + '/с)</div></div>' +
+    '<div class="price">▦ ' + fmt(s.cost) + '</div>';
+  shopRefs.push({ el, cost: s.cost });
+  return el;
+}
+
+/* Карточка многоразового улучшения (с уровнем) */
+function upgCard(u) {
+  const cost = upCost(u);
+  const lv = lvl(u.id);
+  const el = document.createElement('div');
+  el.className = 'item' + (lv > 0 ? ' owned' : '');
+  el.dataset.act = 'up:' + u.id;
+  el.innerHTML =
+    '<div class="ic">' + u.ic + '</div>' +
+    '<div class="meta"><div class="nm">' + u.n + (lv > 0 ? ' <span class="lv">ур. ' + lv + '</span>' : '') + '</div>' +
+    '<div class="eff">' + u.desc + '</div></div>' +
+    '<div class="price">▦ ' + fmt(cost) + '</div>';
+  shopRefs.push({ el, cost });
+  return el;
+}
+
+/* Позиции категории */
+function itemsFor(cat) {
+  if (cat === 'ГРЯДКИ') {
+    const arr = [];
+    BEDS.forEach(b => { if (S.beds === b.beds - 1) arr.push(bedCard(b)); });   // следующая одноразовая
+    if (S.beds >= 5) arr.push(infBedCard());                                    // бесконечная
+    return arr;
+  }
+  if (cat === 'СЕМЕНА') {
+    return SEEDS.filter(s => !S.seeds[s.id]).map(seedCard);                     // только некупленные
+  }
+  return UPG.filter(u => u.sec === cat).map(upgCard);                           // многоразовые — всегда
+}
+
+function renderShop(force) {
+  const key = structKey();
+  if (!force && key === shopStructKey) return;
+  shopStructKey = key;
+  shopRefs = [];
+  const box = $('shopList');
+  box.innerHTML = '';
+  SEC_ORDER.forEach(cat => {
+    const items = itemsFor(cat);
+    if (!items.length) return;              // пустую категорию не показываем
+    box.appendChild(secEl(cat));
+    items.forEach(el => box.appendChild(el));
+  });
+  updateAfford();
+}
+
+/* Обновляем только доступность (без пересборки DOM) */
+function updateAfford() {
+  for (const r of shopRefs) {
+    const can = S.px >= r.cost;
+    r.el.classList.toggle('no', !can);
+  }
+}
+
+$('shopList').addEventListener('click', (e) => {
+  const it = e.target.closest('[data-act]');
+  if (!it || it.classList.contains('no')) return;
+  const act = it.dataset.act;
+  if (act === 'bedInf') buyBedInf();
+  else if (act.startsWith('bed:')) buyBedTo(+act.slice(4));
+  else if (act.startsWith('up:')) buyUp(act.slice(3));
+  else if (act.startsWith('seed:')) buySeed(act.slice(5));
+});
+
+/* ======================================================================
+   HUD
+   ====================================================================== */
+function renderHud() {
+  $('pxTop').textContent = fmt(S.px);
+  $('chRate').textContent = fmt(perSec());
+  $('chClick').textContent = fmt(perClick());
+  $('gardenInfo').textContent = seedDef().ic + ' ' + seedDef().n + ' · Грядок: ' + S.beds;
+  // Престиж: показываем строку только когда есть ⭐
+  const stars = S.stars || 0;
+  $('starLine').hidden = stars <= 0;
+  if (stars > 0) {
+    $('starCount').textContent = stars;
+    $('starBonus').textContent = '+' + Math.round((prestigeMul() - 1) * 100) + '%';
+  }
+  // Баннер редкого события: показывает эффект и сколько осталось
+  const bar = $('eventBar');
+  if (ev) {
+    bar.hidden = false;
+    bar.className = ev.bad ? 'bad' : 'good';
+    bar.textContent = (ev.bad ? '⚠️ ' : '🎊 ') + ev.ic + ' ' + ev.n +
+      ' — доход ×' + ev.mul + ' · ещё ' + Math.max(0, Math.ceil(ev.t)) + 'с';
+  } else {
+    bar.hidden = true;
+  }
+  const cap = barnCap();
+  $('hvNow').textContent = fmt(S.harvest);
+  $('hvCap').textContent = fmt(cap);
+  $('hvFill').style.width = clamp(S.harvest / cap * 100, 0, 100) + '%';
+  $('btnSell').textContent = '🏪 Продать урожай — ▦ ' + fmt(Math.floor(S.harvest * price()));
+  $('btnSell').disabled = S.harvest <= 0;
+}
+
+/* ======================================================================
+   СИМУЛЯЦИЯ ГРЯДОК
+   ====================================================================== */
+function updateGarden(dt) {
+  const rate = growMul() / seedDef().time;
+  const yMul = yieldMul() * allMul() * prestigeMul() * eventMul();
+  const cap = barnCap();
+  const yld = seedDef().yield;
+  let full = false;
+  for (let i = 0; i < S.beds; i++) {
+    let p = (S.prog[i] || 0) + rate * dt;
+    while (p >= 1) {
+      p -= 1;
+      const add = yld * yMul;
+      if (S.harvest + add <= cap) S.harvest += add;
+      else { S.harvest = cap; full = true; }
+    }
+    S.prog[i] = p;
+  }
+  if (full) {
+    const now = performance.now();
+    if (now - lastFullToast > 4000) { lastFullToast = now; toast('📦 Амбар полон — продай урожай или купи Амбар'); }
+  }
+  if (lvl('market') > 0 && S.harvest >= cap * 0.85) sellHarvest(true);   // авто-продажа с рынком
+}
+
+/* ======================================================================
+   CANVAS: детализированная пиксельная сцена
+   ====================================================================== */
+const cv = $('garden');
+const ctx = cv.getContext('2d');
+const W = cv.width, H = cv.height;      // 260 x 170
+const GROUND = 120;
+ctx.imageSmoothingEnabled = false;
+
+const CLOUDS = [{ x: 30, y: 26, s: 1.0 }, { x: 150, y: 16, s: 0.8 }, { x: 220, y: 38, s: 1.2 }];
+
+const parts = [];
+function burst(x, y, n) {
+  const col = seedDef().head;
+  for (let i = 0; i < n; i++) {
+    parts.push({ x, y, vx: (Math.random() - 0.5) * 34, vy: -20 - Math.random() * 26, life: 0.6 + Math.random() * 0.4, age: 0, c: Math.random() < 0.25 ? '#ffffff' : col });
+  }
+}
+function bigBurst() {
+  for (let i = 0; i < 46; i++) {
+    parts.push({ x: W / 2, y: GROUND - 14, vx: (Math.random() - 0.5) * 130, vy: -40 - Math.random() * 70, life: 0.9 + Math.random() * 0.6, age: 0, c: Math.random() < 0.3 ? '#ffffff' : '#ffd95e' });
+  }
+}
+function updateParts(dt) {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    p.age += dt;
+    if (p.age >= p.life) { parts.splice(i, 1); continue; }
+    p.vy += 120 * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+  }
+}
+function drawParts() {
+  parts.forEach(p => {
+    const s = p.age < p.life * 0.6 ? 2 : 1;
+    ctx.fillStyle = p.c;
+    ctx.fillRect(p.x | 0, p.y | 0, s, s);
+  });
+}
+function floatText(x, y, text) {
+  const d = document.createElement('div');
+  d.className = 'float';
+  d.textContent = text;
+  d.style.left = x + 'px'; d.style.top = y + 'px';
+  $('floats').appendChild(d);
+  setTimeout(() => d.remove(), 800);
+}
+
+function drawSky(t) {
+  const bands = ['#26324e', '#33456a', '#405a82', '#4d6f9a'];
+  const bh = Math.ceil(GROUND / bands.length);
+  bands.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(0, i * bh, W, bh); });
+  ctx.fillStyle = '#ffe07a';
+  ctx.fillRect(W - 44, 16, 16, 16);
+  ctx.fillRect(W - 48, 20, 24, 8);
+  ctx.fillRect(W - 40, 12, 8, 24);
+  ctx.fillStyle = '#fff4c0';
+  ctx.fillRect(W - 40, 20, 8, 8);
+  CLOUDS.forEach(cd => {
+    const x = ((cd.x + t * 6 * cd.s) % (W + 60)) - 30;
+    const y = cd.y, s = cd.s;
+    ctx.fillStyle = '#cdd9ec';
+    ctx.fillRect(x, y, 26 * s, 8 * s);
+    ctx.fillRect(x + 4 * s, y - 5 * s, 18 * s, 6 * s);
+    ctx.fillRect(x + 8 * s, y + 6 * s, 14 * s, 4 * s);
+  });
+}
+function drawHills() {
+  ctx.fillStyle = '#2c4a2a';
+  for (let x = 0; x < W; x += 40) {
+    ctx.fillRect(x, GROUND - 22, 40, 22);
+    ctx.fillRect(x + 8, GROUND - 30, 24, 8);
+  }
+  ctx.fillStyle = '#356033';
+  for (let x = 20; x < W; x += 60) ctx.fillRect(x, GROUND - 16, 30, 16);
+}
+function drawBarn() {
+  const bx = 12, by = GROUND - 62, bw = 46, bh = 40;
+  ctx.fillStyle = '#8a3324'; ctx.fillRect(bx, by + 12, bw, bh);
+  ctx.fillStyle = '#c0412d'; ctx.fillRect(bx + 3, by + 15, bw - 6, bh - 6);
+  ctx.fillStyle = '#e0d7c0';
+  ctx.fillRect(bx + (bw / 2) - 6, by + 28, 12, bh - 16);
+  ctx.fillRect(bx + (bw / 2) - 1, by + 28, 2, bh - 16);
+  ctx.fillStyle = '#7a2a1c'; ctx.fillRect(bx, by + 8, bw, 6);
+  ctx.fillStyle = '#b03a28';
+  ctx.fillRect(bx + 3, by + 2, bw - 6, 6);
+  ctx.fillRect(bx + 10, by - 2, bw - 20, 6);
+  ctx.fillStyle = '#f0e6cc'; ctx.fillRect(bx + (bw / 2) - 1, by - 6, 2, 6);
+}
+function drawFence() {
+  ctx.fillStyle = '#7a5a34';
+  ctx.fillRect(0, GROUND - 14, W, 2);
+  ctx.fillRect(0, GROUND - 8, W, 2);
+  for (let x = 6; x < W; x += 26) ctx.fillRect(x, GROUND - 18, 3, 12);
+}
+function drawGround() {
+  ctx.fillStyle = '#3a2a12'; ctx.fillRect(0, GROUND, W, H - GROUND);
+  ctx.fillStyle = '#6b431f'; ctx.fillRect(0, GROUND, W, 7);
+  let seed = 99 + S.beds;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  for (let i = 0; i < 90; i++) {
+    const x = (rnd() * W) | 0, y = GROUND + 5 + ((rnd() * (H - GROUND - 6)) | 0);
+    ctx.fillStyle = rnd() < 0.5 ? '#552f13' : '#7d5228';
+    ctx.fillRect(x, y, 2, 2);
+  }
+  ctx.fillStyle = '#4a3016';
+  for (let y = GROUND + 10; y < H; y += 9) ctx.fillRect(0, y, W, 1);
+}
+
+/* Растение: все части привязаны к низу (gy) и растут вверх синхронно */
+function drawCrop(x, gy, prog, pal, t) {
+  const ripe = prog > 0.9;
+  const sx = Math.round(x + Math.sin(t * 1.7 + x * 0.25) * 1.6);
+  let sparkTop = gy - 24;
+  switch (pal.shape) {
+    case 'stalk': {
+      const h = 12 + prog * 44; const top = gy - h; sparkTop = top - 8;
+      ctx.fillStyle = pal.stem; ctx.fillRect(sx - 1, top, 2, h);
+      ctx.fillStyle = pal.glow && ripe ? '#fff3b0' : pal.head;
+      const gh = 3 + prog * 8;
+      ctx.fillRect(sx - 1, top - gh + 1, 3, gh);
+      ctx.fillRect(sx - 4, top + 4, 2, 2); ctx.fillRect(sx + 2, top + 6, 2, 2);
+      ctx.fillStyle = pal.stem;
+      ctx.fillRect(sx - 5, gy - 10, 4, 2); ctx.fillRect(sx + 2, gy - 16, 4, 2);
+      break;
+    }
+    case 'leafy': {
+      const rootH = 3 + prog * 5;
+      let leafH = 4 + prog * 9;
+      const leafY = gy - rootH;
+      if (leafY - leafH < 6) leafH = Math.max(2, leafY - 6);
+      const leafTop = leafY - leafH; sparkTop = leafTop - 4;
+      ctx.fillStyle = pal.stem;
+      ctx.fillRect(sx - 4, leafTop, 3, leafH);
+      ctx.fillRect(sx + 1, leafTop, 3, leafH);
+      ctx.fillRect(sx - 1, leafTop - 3, 2, 5);
+      ctx.fillRect(sx - 6, leafTop + 2, 3, 3);
+      ctx.fillRect(sx + 4, leafTop + 2, 3, 3);
+      ctx.fillStyle = pal.head;
+      const rw = 4 + prog * 3;
+      ctx.fillRect(sx - rw / 2, leafY, rw, rootH);
+      ctx.fillStyle = '#c96a20';
+      ctx.fillRect(sx - 1, gy - 1, 2, 2);
+      break;
+    }
+    case 'bush': {
+      const bw = 8 + prog * 12, bh = 8 + prog * 18; const top = gy - bh; sparkTop = top - 4;
+      ctx.fillStyle = pal.stem; ctx.fillRect(sx - bw / 2, top, bw, bh);
+      if (ripe) { ctx.fillStyle = pal.head; ctx.fillRect(sx - bw / 2 + 2, top + 3, 3, 3); ctx.fillRect(sx + 1, top + 8, 3, 3); }
+      break;
+    }
+    case 'vine': {
+      const h = 14 + prog * 34; const top = gy - h; sparkTop = top - 4;
+      ctx.fillStyle = pal.stem;
+      ctx.fillRect(sx - 1, top, 2, h);
+      ctx.fillRect(sx - 5, top + 6, 4, 3); ctx.fillRect(sx + 2, top + 12, 4, 3);
+      ctx.fillStyle = pal.head;
+      const r = 2 + prog * 2;
+      for (let row = 0; row < 3; row++)
+        for (let col = 0; col <= row; col++)
+          ctx.fillRect(sx - row * r + col * r * 2 - r, top + (2 - row) * r, r * 2, r * 2);
+      break;
+    }
+    case 'sun': {
+      const h = 16 + prog * 40; const top = gy - h; sparkTop = top - 8;
+      ctx.fillStyle = pal.stem;
+      ctx.fillRect(sx - 1, top, 2, h);
+      ctx.fillRect(sx - 5, gy - 12, 4, 2); ctx.fillRect(sx + 2, gy - 18, 4, 2);
+      const r = 3 + prog * 6;
+      ctx.fillStyle = pal.head; ctx.fillRect(sx - r, top - r, r * 2, r * 2);
+      ctx.fillStyle = '#7a5a12'; ctx.fillRect(sx - 2, top - 2, 4, 4);
+      break;
+    }
+    case 'tree': {
+      // фруктовое дерево: ствол растёт, крона наливается, плоды появляются при созревании
+      const th = 8 + prog * 20;                     // высота ствола
+      const cw = 12 + prog * 16;                    // ширина кроны
+      const cy0 = gy - th - cw * 0.5;               // центр кроны
+      sparkTop = cy0 - cw * 0.5 - 4;
+      ctx.fillStyle = '#6b4a2a'; ctx.fillRect(sx - 2, gy - th, 4, th);        // ствол
+      ctx.fillStyle = pal.stem;                                              // крона
+      ctx.fillRect(sx - cw / 2, cy0 - cw * 0.3, cw, cw * 0.65);
+      ctx.fillRect(sx - cw / 2 + 3, cy0 - cw * 0.55, cw - 6, cw * 0.4);
+      ctx.fillStyle = pal.glow && ripe ? '#fff3b0' : pal.head;               // плоды
+      if (prog > 0.5) {
+        ctx.fillRect(sx - cw / 3, cy0 - cw * 0.1, 3, 3);
+        ctx.fillRect(sx + cw / 5, cy0 + cw * 0.05, 3, 3);
+        if (ripe) ctx.fillRect(sx - 1, cy0 - cw * 0.35, 3, 3);
+      }
+      break;
+    }
+    default: {
+      const r = 3 + prog * 8; const top = gy - r * 1.5; sparkTop = top - 4;
+      ctx.fillStyle = pal.stem; ctx.fillRect(sx - 1, top, 2, r * 1.5);
+      ctx.fillStyle = pal.head; ctx.fillRect(sx - r, top, r * 2, r * 1.5);
+      ctx.fillStyle = 'rgba(0,0,0,.25)';
+      ctx.fillRect(sx - r / 3, top, 1, r * 1.5);
+      ctx.fillRect(sx + r / 3, top, 1, r * 1.5);
+      break;
+    }
+  }
+  if (ripe) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(sx - 2, Math.max(2, sparkTop), 1, 1);
+    ctx.fillRect(sx + 3, Math.max(2, sparkTop + 1), 1, 1);
+  }
+}
+
+function drawScene(t) {
+  drawSky(t); drawHills(); drawBarn(); drawFence(); drawGround();
+  const pal = seedDef();
+  const n = S.beds;
+  for (let i = 0; i < n; i++) {
+    const x = n === 1 ? W / 2 : 22 + i * ((W - 44) / (n - 1));
+    drawCrop(x, GROUND, S.prog[i] || 0, pal, t + i * 0.4);
+  }
+  drawParts();
+}
+
+/* ======================================================================
+   ГЛАВНЫЙ ЦИКЛ
+   ====================================================================== */
+let lastT = performance.now(), hudAcc = 0, saveAcc = 0;
+function loop(now) {
+  let dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.5) dt = 0.5;
+
+  if (perSec() > 0) { S.px += perSec() * dt; S.total += perSec() * dt; }
+  updateGarden(dt);
+  updateEvents(dt);
+  updateParts(dt);
+  drawScene(now / 1000);
+
+  hudAcc += dt;
+  if (hudAcc > 0.1) { hudAcc = 0; renderHud(); updateAfford(); }
+
+  saveAcc += dt;
+  if (saveAcc > 5) { saveAcc = 0; save(); }
+
+  requestAnimationFrame(loop);
+}
+
+/* ======================================================================
+   ВСТУПЛЕНИЕ
+   ====================================================================== */
+function playIntro() {
+  modal('ДОБРО ПОЖАЛОВАТЬ НА ФЕРМУ',
+    '<div class="who">Старый фермер:</div>«Земля тут не простая — она растёт пикселями! ' +
+    'Тапай грядку ради ▦ пикселей, а семена тем временем зреют в амбаре.»' +
+    '<div class="stats">' +
+    '▦ <b>Пиксели</b> — валюта за клики и продажу урожая.<br>' +
+    '🌱 <b>Семена</b> и 🟫 <b>грядки</b> — одноразовые: купил — в списке их больше нет.<br>' +
+    '🛠 <b>Улучшения</b> (клик, автоклик, рост, урожай, особые) — многоразовые, но дорожают ×2–×3 за уровень: прокачать всё сразу не выйдет, придётся выбирать.<br>' +
+    '🧺 Продавай урожай на 🏪 <b>рынке</b> — амбар маленький, так что продавать придётся часто.<br>' +
+    '🌪 Иногда случаются <b>события</b> (засуха, вредители — доход падает; ярмарка, дожди — растёт).<br>' +
+    '⭐ <b>Престиж</b> в ⚙ Настройках: сбрось ферму и получи ⭐ (+5% к доходу навсегда).<br>' +
+    '⚙ <b>Настройки</b> — в углу.' +
+    '</div>',
+    [{ label: 'За работу!', cls: 'pri', fn: () => { S.started = true; save(); } }]);
+}
+
+/* ======================================================================
+   PWA
+   ====================================================================== */
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault(); deferredPrompt = e;
+  $('btnInstall').hidden = false;
+});
+$('btnInstall').onclick = () => {
+  if (!deferredPrompt) { toast('Меню браузера → «Установить приложение»'); return; }
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.finally(() => { deferredPrompt = null; $('btnInstall').hidden = true; });
+};
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+}
+
+/* ======================================================================
+   ЗАПУСК
+   ====================================================================== */
+$('floats').addEventListener('pointerdown', (e) => e.preventDefault());
+$('gardenBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); tap(e); });
+$('btnSell').onclick = () => sellHarvest(false);
+$('btnSettings').onclick = openSettings;
+document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+window.addEventListener('beforeunload', save);
+
+const hadSave = load();
+renderShop(true);
+renderHud();
+if (!hadSave || !S.started) playIntro();
+else toast('👋 С возвращением, фермер!');
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
