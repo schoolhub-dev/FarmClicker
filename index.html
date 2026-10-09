@@ -149,6 +149,17 @@
     #mBody .stats b { color: var(--txt); }
     #mBtns { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 
+    /* ЭКСПОРТ/ИМПОРТ КОДА СОХРАНЕНИЯ */
+    .codeBox {
+      width: 100%; box-sizing: border-box; margin-top: 8px; padding: 8px;
+      font-family: Consolas, 'Courier New', monospace; font-size: 11.5px; line-height: 1.4;
+      background: #0e140c; color: var(--green); border: 2px solid var(--line); border-radius: 8px;
+      resize: vertical; word-break: break-all;
+    }
+    .codeStatus { margin-top: 8px; font-size: 12px; font-weight: 700; line-height: 1.5; }
+    .codeStatus.ok  { color: var(--green); }
+    .codeStatus.err { color: var(--red); }
+
     #toasts { position: fixed; top: 14px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 60; pointer-events: none; }
     .toast {
       background: #26361f; border: 2px solid var(--green); border-radius: 8px; color: var(--txt);
@@ -228,6 +239,11 @@
   </div>
   <div id="toasts"></div>
 
+<!-- Сжатие кодов сохранения: lz-string 1.5.0 (MIT, офлайн, без внешних библиотек).
+     Используется функциями «Создать код» и «Загрузить код» в настройках. -->
+<script>
+var LZString=function(){var r=String.fromCharCode,o="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=",n="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$",e={};function t(r,o){if(!e[r]){e[r]={};for(var n=0;n<r.length;n++)e[r][r.charAt(n)]=n}return e[r][o]}var i={compressToBase64:function(r){if(null==r)return"";var n=i._compress(r,6,function(r){return o.charAt(r)});switch(n.length%4){default:case 0:return n;case 1:return n+"===";case 2:return n+"==";case 3:return n+"="}},decompressFromBase64:function(r){return null==r?"":""==r?null:i._decompress(r.length,32,function(n){return t(o,r.charAt(n))})},compressToUTF16:function(o){return null==o?"":i._compress(o,15,function(o){return r(o+32)})+" "},decompressFromUTF16:function(r){return null==r?"":""==r?null:i._decompress(r.length,16384,function(o){return r.charCodeAt(o)-32})},compressToUint8Array:function(r){for(var o=i.compress(r),n=new Uint8Array(2*o.length),e=0,t=o.length;e<t;e++){var s=o.charCodeAt(e);n[2*e]=s>>>8,n[2*e+1]=s%256}return n},decompressFromUint8Array:function(o){if(null==o)return i.decompress(o);for(var n=new Array(o.length/2),e=0,t=n.length;e<t;e++)n[e]=256*o[2*e]+o[2*e+1];var s=[];return n.forEach(function(o){s.push(r(o))}),i.decompress(s.join(""))},compressToEncodedURIComponent:function(r){return null==r?"":i._compress(r,6,function(r){return n.charAt(r)})},decompressFromEncodedURIComponent:function(r){return null==r?"":""==r?null:(r=r.replace(/ /g,"+"),i._decompress(r.length,32,function(o){return t(n,r.charAt(o))}))},compress:function(o){return i._compress(o,16,function(o){return r(o)})},_compress:function(r,o,n){if(null==r)return"";var e,t,i,s={},u={},a="",p="",c="",l=2,f=3,h=2,d=[],m=0,v=0;for(i=0;i<r.length;i+=1)if(a=r.charAt(i),Object.prototype.hasOwnProperty.call(s,a)||(s[a]=f++,u[a]=!0),p=c+a,Object.prototype.hasOwnProperty.call(s,p))c=p;else{if(Object.prototype.hasOwnProperty.call(u,c)){if(c.charCodeAt(0)<256){for(e=0;e<h;e++)m<<=1,v==o-1?(v=0,d.push(n(m)),m=0):v++;for(t=c.charCodeAt(0),e=0;e<8;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}else{for(t=1,e=0;e<h;e++)m=m<<1|t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t=0;for(t=c.charCodeAt(0),e=0;e<16;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}0==--l&&(l=Math.pow(2,h),h++),delete u[c]}else for(t=s[c],e=0;e<h;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1;0==--l&&(l=Math.pow(2,h),h++),s[p]=f++,c=String(a)}if(""!==c){if(Object.prototype.hasOwnProperty.call(u,c)){if(c.charCodeAt(0)<256){for(e=0;e<h;e++)m<<=1,v==o-1?(v=0,d.push(n(m)),m=0):v++;for(t=c.charCodeAt(0),e=0;e<8;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}else{for(t=1,e=0;e<h;e++)m=m<<1|t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t=0;for(t=c.charCodeAt(0),e=0;e<16;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}0==--l&&(l=Math.pow(2,h),h++),delete u[c]}else for(t=s[c],e=0;e<h;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1;0==--l&&(l=Math.pow(2,h),h++)}for(t=2,e=0;e<h;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1;for(;;){if(m<<=1,v==o-1){d.push(n(m));break}v++}return d.join("")},decompress:function(r){return null==r?"":""==r?null:i._decompress(r.length,32768,function(o){return r.charCodeAt(o)})},_decompress:function(o,n,e){var t,i,s,u,a,p,c,l=[],f=4,h=4,d=3,m="",v=[],g={val:e(0),position:n,index:1};for(t=0;t<3;t+=1)l[t]=t;for(s=0,a=Math.pow(2,2),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;switch(s){case 0:for(s=0,a=Math.pow(2,8),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;c=r(s);break;case 1:for(s=0,a=Math.pow(2,16),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;c=r(s);break;case 2:return""}for(l[3]=c,i=c,v.push(c);;){if(g.index>o)return"";for(s=0,a=Math.pow(2,d),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;switch(c=s){case 0:for(s=0,a=Math.pow(2,8),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;l[h++]=r(s),c=h-1,f--;break;case 1:for(s=0,a=Math.pow(2,16),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;l[h++]=r(s),c=h-1,f--;break;case 2:return v.join("")}if(0==f&&(f=Math.pow(2,d),d++),l[c])m=l[c];else{if(c!==h)return null;m=i+i.charAt(0)}v.push(m),l[h++]=i+m.charAt(0),i=m,0==--f&&(f=Math.pow(2,d),d++)}}};return i}();"function"==typeof define&&define.amd?define(function(){return LZString}):"undefined"!=typeof module&&null!=module?module.exports=LZString:"undefined"!=typeof angular&&null!=angular&&angular.module("LZString",[]).factory("LZString",function(){return LZString});
+</script>
 <script>
 /* ======================================================================
    ФЕРМА ПИКСЕЛЕЙ — браузерный кликер про ферму (один файл, Cookie Clicker)
@@ -419,18 +435,47 @@ function save() {
   if (resetting) return;                                   // во время сброса не сохраняем ничего
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {}
 }
+/* Санитизация состояния: превращает любой объект в корректное сохранение.
+   Используется и при загрузке из localStorage, и при импорте кода. */
+function sanitizeState(o) {
+  if (!o || typeof o !== 'object') return null;
+  const s = defState();
+  // числа: при ошибке или бесконечности берём значение по умолчанию
+  const num = (v, lo, hi, def) => { v = Number(v); return (isFinite(v)) ? clamp(v, lo, hi) : def; };
+  s.px      = num(o.px, 0, Infinity, 0);
+  s.total   = num(o.total, 0, Infinity, 0);
+  s.clicks  = num(o.clicks, 0, Infinity, 0) | 0;
+  s.harvest = num(o.harvest, 0, Infinity, 0);
+  s.beds    = Math.round(num(o.beds, 1, MAX_BEDS, 1));
+  s.stars   = num(o.stars, 0, Infinity, 0) | 0;
+  s.started = !!o.started;
+  // купленные семена: только реально существующие в игре
+  if (o.seeds && typeof o.seeds === 'object') {
+    for (const k of Object.keys(o.seeds)) if (o.seeds[k] && SEEDS.some(x => x.id === k)) s.seeds[k] = true;
+  }
+  s.seeds.wheat = true;                              // пшеница есть всегда
+  // уровни улучшений: только известные id, неотрицательные целые
+  if (o.up && typeof o.up === 'object') {
+    for (const u of UPG) { const v = num(o.up[u.id], 0, 1e9, 0); s.up[u.id] = Math.floor(v); }
+  }
+  // активное семя: должно быть куплено
+  const chosen = typeof o.seed === 'string' ? o.seed : 'wheat';
+  s.seed = s.seeds[chosen] ? chosen : 'wheat';
+  // прогресс роста по грядкам: не длиннее числа грядок, значения 0..1
+  s.prog = Array.isArray(o.prog)
+    ? o.prog.slice(0, s.beds).map(v => clamp(Number(v) || 0, 0, 1))
+    : [];
+  while (s.prog.length < s.beds) s.prog.push(0);
+  return s;
+}
+
 function load() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return false;
-    const o = JSON.parse(raw);
-    S = Object.assign(defState(), o);
-    S.seeds = Object.assign({ wheat: true }, o.seeds);
-    S.up = Object.assign(defState().up, o.up);
-    if (!S.seeds[S.seed]) S.seed = 'wheat';
-    S.beds = clamp(S.beds | 0, 1, MAX_BEDS);
-    S.prog = Array.isArray(o.prog) ? o.prog.slice(0, S.beds) : [];
-    while (S.prog.length < S.beds) S.prog.push(0);
+    const s = sanitizeState(JSON.parse(raw));
+    if (!s) return false;
+    S = s;
     return true;
   } catch (e) { return false; }
 }
@@ -597,6 +642,68 @@ function doPrestige() {
   location.reload();
 }
 
+/* ===== КОД СОХРАНЕНИЯ =====
+   Экспорт: состояние → компактный JSON → сжатие lz-string → base64-код в текстовое поле.
+   Импорт: код → распаковка → проверка данных (sanitizeState) → перезагрузка страницы.
+   Оба действия находятся в настройках (⚙). */
+function buildSaveJSON() {
+  const r2 = v => Math.round(v * 100) / 100;      // округляем числа — код выходит короче
+  return JSON.stringify({
+    px: r2(S.px), total: r2(S.total), clicks: S.clicks | 0,
+    harvest: r2(S.harvest), beds: S.beds, seed: S.seed,
+    seeds: S.seeds, up: S.up,
+    prog: S.prog.map(r2),
+    stars: (S.stars || 0) | 0, started: !!S.started,
+  });
+}
+
+function setCodeStatus(msg, cls) {
+  const st = $('codeStatus');
+  st.textContent = msg;
+  st.className = 'codeStatus ' + cls;
+  st.hidden = false;
+}
+
+/* Пункт 1: собрать всё состояние, сжать и показать код в текстовом поле */
+function exportCode() {
+  try {
+    const code = LZString.compressToBase64(buildSaveJSON());
+    $('codeOut').value = code;
+    setCodeStatus('✅ Код создан: ' + code.length + ' симв. Скопируй его и сохрани. Он заменит прогресс при загрузке.', 'ok');
+  } catch (e) { setCodeStatus('⚠️ Не удалось создать код', 'err'); }
+}
+
+/* Бонус: быстрое копирование кода в буфер обмена */
+function copyCode() {
+  const t = $('codeOut');
+  if (!t.value) { toast('Сначала нажми «Создать код»'); return; }
+  t.select(); t.setSelectionRange(0, t.value.length);
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) {}
+  toast(ok ? '📋 Код скопирован' : 'Выдели код и нажми Ctrl+C');
+}
+
+/* Пункт 2: принять код, распаковать, проверить и загрузить прогресс */
+function importCode() {
+  const code = $('codeIn').value.trim();
+  if (!code) { setCodeStatus('Вставь код в поле выше', 'err'); return; }
+  let json = null;
+  try { json = LZString.decompressFromBase64(code); } catch (e) {}
+  if (json === null) {                       // запасной вариант: чистый JSON или URL-код
+    try { json = code.charAt(0) === '{' ? code : LZString.decompressFromEncodedURIComponent(code); } catch (e) {}
+  }
+  if (!json) { setCodeStatus('⚠️ Ошибка: код не распознан — проверь, что ты скопировал его целиком', 'err'); return; }
+  try {
+    const s = sanitizeState(JSON.parse(json));
+    if (!s) { setCodeStatus('⚠️ Ошибка: в коде нет данных сохранения', 'err'); return; }
+    S = s;
+    shopStructKey = ''; shopRefs = [];       // магазин перерисуется при загрузке
+    save();                                  // пишем в localStorage перед перезагрузкой
+    toast('✅ Сохранение загружено, перезагружаюсь…');
+    setTimeout(() => location.reload(), 700);
+  } catch (e) { setCodeStatus('⚠️ Ошибка: код неверный или повреждён', 'err'); }
+}
+
 function openSettings() {
   const gain = prestigeGain();
   modal('НАСТРОЙКИ',
@@ -612,6 +719,18 @@ function openSettings() {
     '⭐ <b>Престиж</b>: у вас <b>' + (S.stars || 0) + '</b> ⭐ · бонус к доходу <b>+' +
       Math.round((prestigeMul() - 1) * 100) + '%</b><br>' +
     'Сейчас можно получить: <b>' + gain + '</b> ⭐ (сброс всей фермы, но ⭐ остаются).' +
+    '</div>' +
+    '<div class="stats">' +
+    '📤 <b>Сохранение кодом</b> — прогресс можно перенести на другой телефон/компьютер.<br>' +
+    '<button type="button" class="btn pri" onclick="exportCode()">📤 Создать код</button><br>' +
+    '<textarea id="codeOut" class="codeBox" rows="3" readonly placeholder="Код появится здесь…"></textarea>' +
+    '<button type="button" class="btn ghost" onclick="copyCode()">📋 Скопировать</button>' +
+    '</div>' +
+    '<div class="stats">' +
+    '📥 <b>Загрузка по коду</b> — вставь код и нажми кнопку. Текущий прогресс будет заменён.<br>' +
+    '<textarea id="codeIn" class="codeBox" rows="3" placeholder="Вставь код сюда…"></textarea><br>' +
+    '<button type="button" class="btn" onclick="importCode()">📥 Загрузить код</button>' +
+    '<div id="codeStatus" class="codeStatus" hidden></div>' +
     '</div>',
     [
       { label: '⭐ Престиж: сбросить за ' + gain + ' ⭐', cls: 'gold', fn: doPrestige },
