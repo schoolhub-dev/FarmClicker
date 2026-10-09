@@ -348,6 +348,7 @@ function sciStr(a) {
 /* Универсальный формат: принимает и обычное число, и big-число {m,e}.
    Никогда не возвращает NaN/Infinity/минус. */
 function fmt(x) {
+  if (typeof x === 'bigint') return fmtStars(x);
   if (x && typeof x === 'object' && isFinite(x.m)) return sciStr(x);
   const n = Number(x);
   if (!isFinite(n)) return '∞';
@@ -478,7 +479,7 @@ function defState() {
     seeds: { wheat: true },
     up,
     prog: [0],           // прогресс роста по каждой грядке
-    stars: 0,            // ⭐ престиж: навсегда увеличивают весь доход
+    stars: 0n,           // ⭐ престиж — BigInt: целые числа не переполняются и не уходят в минус
     started: false,
   };
 }
@@ -515,9 +516,15 @@ function updateEvents(dt) {
 
 /* Флаг сброса: пока true — автосейв молчит, чтобы не вернуть только что стёртые данные */
 let resetting = false;
+/* Копия состояния для JSON: BigInt (престиж) превращаем в строку — JSON.stringify не умеет BigInt */
+function plainState() {
+  const d = { stars: starsBig(S.stars).toString() };
+  for (const k in S) if (k !== 'stars') d[k] = S[k];
+  return d;
+}
 function save() {
   if (resetting) return;                                   // во время сброса не сохраняем ничего
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(plainState())); } catch (e) {}
 }
 /* Санитизация состояния: превращает любой объект в корректное сохранение.
    Используется и при загрузке из localStorage, и при импорте кода. */
@@ -537,7 +544,7 @@ function sanitizeState(o) {
   s.clicks  = num(o.clicks, 0, Infinity, 0) | 0;
   s.harvest = num(o.harvest, 0, Infinity, 0);
   s.beds    = Math.round(num(o.beds, 1, MAX_BEDS, 1));
-  s.stars   = num(o.stars, 0, Infinity, 0) | 0;
+  s.stars   = starsBig(o.stars);                      // ⭐ — BigInt; отрицательный престиж сбрасывается к 0
   s.started = !!o.started;
   // купленные семена: только реально существующие в игре
   if (o.seeds && typeof o.seeds === 'object') {
@@ -582,9 +589,61 @@ function yieldMul() { return (1 + lvl('collector') * 0.12 + lvl('orangery') * 0.
 function allMul() { return (1 + lvl('portal') * 0.25 + lvl('timemachine') * 0.35 + lvl('blackhole') * 0.5 + lvl('mars') * 0.8); }
 function barnCap() { return sciMulS(sciFrom(150), Math.pow(2.2, lvl('barn'))); }   // амбар: ×2.2 к лимиту за уровень (big)
 function price() { return 1 + lvl('market') * 0.12 + lvl('export') * 0.25; }
-/* Престиж: каждая ⭐ даёт +5% ко всему доходу (складывается с прочими множителями) */
-function prestigeGain() { return sciFloor(sciSqrt(sciDivS(S.total, 1e4))); }      // сколько ⭐ дадут за текущий прогресс (big)
-function prestigeMul() { return 1 + (S.stars || 0) * 0.05; }
+/* Престиж: каждая ⭐ даёт +5% ко всему доходу (складывается с прочими множителями).
+   Звёзды храним как BigInt — они не ограничены 2^53, не переполняются и не могут уйти в минус.
+   Показываем их суффиксами: 0, 12, 1.5K, 3.2M, 7.8B, 1.9T, Qa, Qi, … */
+function starsBig(v) {
+  // любое значение (число, строка, BigInt) → неотрицательный BigInt; минус сбрасываем к 0
+  if (typeof v === 'bigint') return v >= 0n ? v : 0n;
+  if (v === null || v === undefined || v === '') return 0n;
+  try {
+    const b = BigInt(String(v));
+    return b >= 0n ? b : 0n;                     // отрицательный престиж → 0
+  } catch (e) { return 0n; }
+}
+function starsNum() {
+  // число звёзд для формул бонуса дохода: BigInt → number (огромные значения упираются в предел, минуса нет)
+  const n = Number(starsBig(S.stars));
+  return isFinite(n) ? n : 1e100;
+}
+function sciFromBigInt(b) {
+  // BigInt → big-число {m,e} (для суффиксов и сравнений)
+  if (typeof b !== 'bigint') b = starsBig(b);
+  if (b <= 0n) return { m: 0, e: 0 };
+  const s = b.toString();
+  const m = Number(s.slice(0, 13)) / Math.pow(10, Math.min(12, s.length - 1));
+  return { m, e: s.length - 1 };
+}
+function fmtStars(b) {
+  // отображение престижа: 0, 12, 1.5K, 3.2M, 7.8B, 1.9T, Qa…
+  if (typeof b !== 'bigint') b = starsBig(b);
+  if (b <= 0n) return '0';
+  return sciStr(sciFromBigInt(b));
+}
+function sciToBigInt(a) {
+  // big-число {m,e} → BigInt (целая часть) — считаем корень без float-ошибок
+  if (!a || a.m === 0) return 0n;
+  if (a.e < 0) return 0n;
+  const e = Math.floor(a.e);
+  if (e < 16) return BigInt(Math.floor(a.m * Math.pow(10, e)));
+  const mant = Math.floor(a.m * 1e15);              // 16 значащих цифр мантиссы
+  return BigInt(mant) * 10n ** BigInt(e - 15);
+}
+function bigIntSqrt(n) {
+  // целочисленный корень BigInt (округление вниз): floor(sqrt(n))
+  if (n < 0n) return 0n;
+  if (n < 2n) return n;
+  let x = 1n << BigInt((n.toString(2).length + 1) >> 1);   // стартовое приближение
+  for (;;) {
+    const y = (x + n / x) >> 1n;
+    if (y >= x) break;
+    x = y;
+  }
+  while (x * x > n) x -= 1n;         // Ньютон может дать на единицу больше — это точный floor-корень
+  return x;
+}
+function prestigeGain() { return bigIntSqrt(sciToBigInt(sciDivS(S.total, 1e4))); }   // сколько ⭐ дадут — BigInt
+function prestigeMul() { return 1 + starsNum() * 0.05; }    // бонус не может быть минусом: звёзды всегда ≥ 0
 /* Редкие события: временно меняют доход (засуха, вредители — снижают, ярмарка — повышает) */
 function eventMul() { return ev ? ev.mul : 1; }
 function perClick() { return clickFlat() * clickMul() * allMul() * prestigeMul() * eventMul(); }
@@ -719,16 +778,16 @@ function resetGame() {
    Сброс прогресса в обмен на ⭐. Каждая ⭐ навсегда даёт +5% ко всему доходу,
    поэтому рано или поздно выгодно начать ферму заново — уже сильнее. */
 function doPrestige() {
-  const gain = Math.floor(sciToNum(prestigeGain()));   // сколько ⭐ дадут сейчас (число)
-  if (gain < 1) { toast('Мало заработано — нужно ▦ ' + fmt(1e6) + ' всего за игру'); return; }
-  if (!confirm('Престиж: сбросить ферму и получить ' + gain + ' ⭐?')) return;
+  const gain = prestigeGain();                      // сколько ⭐ дадут сейчас (BigInt)
+  if (gain < 1n) { toast('Мало заработано — нужно ▦ ' + fmt(1e6) + ' всего за игру'); return; }
+  if (!confirm('Престиж: сбросить ферму и получить ' + fmtStars(gain) + ' ⭐?')) return;
 
-  const stars = (S.stars || 0) + gain;      // ⭐ накапливаются между престижами
+  const stars = starsBig(S.stars) + gain;           // ⭐ (BigInt) накапливаются между престижами
   S = defState();
   S.stars = stars;
   S.started = true;
   shopStructKey = ''; shopRefs = [];
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(plainState())); } catch (e) {}
   location.reload();
 }
 
@@ -745,7 +804,7 @@ function buildSaveJSON() {
     harvest: r2(S.harvest), beds: S.beds, seed: S.seed,
     seeds: S.seeds, up: S.up,
     prog: S.prog.map(r2),
-    stars: (S.stars || 0) | 0, started: !!S.started,
+    stars: starsBig(S.stars).toString(), started: !!S.started,   // престиж — BigInt строкой в JSON
   });
 }
 
@@ -797,7 +856,8 @@ function importCode() {
 }
 
 function openSettings() {
-  const gain = Math.floor(sciToNum(prestigeGain()));   // ожидаемое количество ⭐
+  const gain = prestigeGain();                       // сколько ⭐ дадут сейчас (BigInt)
+  const bonus = Math.max(0, Math.round((prestigeMul() - 1) * 100));   // бонус дохода не бывает минусом
   modal('НАСТРОЙКИ',
     '<div class="stats">' +
     'Всего заработано: <b>▦ ' + fmt(S.total) + '</b><br>' +
@@ -808,9 +868,9 @@ function openSettings() {
     'Грядок: <b>' + S.beds + '</b> · Урожай: <b>' + fmt(S.harvest) + ' / ' + fmt(barnCap()) + '</b>' +
     '</div>' +
     '<div class="stats">' +
-    '⭐ <b>Престиж</b>: у вас <b>' + (S.stars || 0) + '</b> ⭐ · бонус к доходу <b>+' +
-      Math.round((prestigeMul() - 1) * 100) + '%</b><br>' +
-    'Сейчас можно получить: <b>' + gain + '</b> ⭐ (сброс всей фермы, но ⭐ остаются).' +
+    '⭐ <b>Престиж</b>: у вас <b>' + fmtStars(S.stars) + '</b> ⭐ · бонус к доходу <b>+' +
+      bonus + '%</b><br>' +
+    'Сейчас можно получить: <b>' + fmtStars(gain) + '</b> ⭐ (сброс всей фермы, но ⭐ остаются).' +
     '</div>' +
     '<div class="stats">' +
     '📤 <b>Сохранение кодом</b> — прогресс можно перенести на другой телефон/компьютер.<br>' +
@@ -825,7 +885,7 @@ function openSettings() {
     '<div id="codeStatus" class="codeStatus" hidden></div>' +
     '</div>',
     [
-      { label: '⭐ Престиж: сбросить за ' + gain + ' ⭐', cls: 'gold', fn: doPrestige },
+      { label: '⭐ Престиж: сбросить за ' + fmtStars(gain) + ' ⭐', cls: 'gold', fn: doPrestige },
       { label: '🗑 Сбросить прогресс', cls: 'danger', fn: resetGame },
       { label: 'Продолжить', cls: 'pri', fn: save },
     ]);
@@ -968,11 +1028,11 @@ function renderHud() {
   $('chClick').textContent = fmt(perClick());
   $('gardenInfo').textContent = seedDef().ic + ' ' + seedDef().n + ' · Грядок: ' + S.beds;
   // Престиж: показываем строку только когда есть ⭐
-  const stars = S.stars || 0;
-  $('starLine').hidden = stars <= 0;
-  if (stars > 0) {
-    $('starCount').textContent = stars;
-    $('starBonus').textContent = '+' + Math.round((prestigeMul() - 1) * 100) + '%';
+  const stars = starsBig(S.stars);
+  $('starLine').hidden = stars <= 0n;
+  if (stars > 0n) {
+    $('starCount').textContent = fmtStars(stars);
+    $('starBonus').textContent = '+' + Math.max(0, Math.round((prestigeMul() - 1) * 100)) + '%';
   }
   // Баннер редкого события: показывает эффект и сколько осталось
   const bar = $('eventBar');
@@ -1246,6 +1306,8 @@ function loop(now) {
   let dt = (now - lastT) / 1000;
   lastT = now;
   if (dt > 0.5) dt = 0.5;
+
+  if (typeof S.stars === 'bigint' && S.stars < 0n) S.stars = 0n;   // ⭐ не бывают отрицательными — сброс к 0
 
   if (perSec() > 0) {
     const gain = sciMulS(sciFrom(perSec()), dt);        // доход за кадр как big-число
